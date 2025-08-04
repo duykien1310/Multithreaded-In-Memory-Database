@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 )
+
+const BufferSize = 2048
 
 type Message struct {
 	From string
@@ -53,7 +56,7 @@ func (s *Server) AcceptListen() {
 			continue
 		}
 
-		fmt.Println("Accept Listen with client addr: ", conn.RemoteAddr().String())
+		fmt.Println("New connection to the server: ", conn.RemoteAddr().String())
 
 		go s.Read(conn) // Can lead to race condition if there is computation logic
 	}
@@ -61,19 +64,25 @@ func (s *Server) AcceptListen() {
 
 func (s *Server) Read(conn net.Conn) {
 	defer conn.Close()
-	buf := make([]byte, 2048)
+	buf := make([]byte, BufferSize)
 	for {
-
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Println("Err read buf: ", err.Error())
+			if err == io.EOF {
+				fmt.Println("Client disconnected:", conn.RemoteAddr())
+				return
+			}
+			fmt.Println("Read error:", err)
 			continue
 		}
 
+		msg := buf[:n]
 		s.Msgch <- Message{
 			From: conn.RemoteAddr().String(),
-			Data: buf[:n],
+			Data: msg,
 		}
+
+		conn.Write([]byte("Thank you for your message!\n"))
 	}
 }
 
