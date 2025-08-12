@@ -45,7 +45,6 @@ type Server struct {
 	cancelFunc context.CancelFunc
 }
 
-// ===== Worker Implementation =====
 func NewWorker(id int, jobChan chan Job) *Worker {
 	return &Worker{ID: id, JobChan: jobChan}
 }
@@ -69,7 +68,6 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
-// ===== Pool Implementation =====
 func NewPool(workerCount, queueSize int) *Pool {
 	return &Pool{
 		JobQueue: make(chan Job, queueSize),
@@ -94,7 +92,6 @@ func (p *Pool) AddJob(conn net.Conn) {
 	p.JobQueue <- Job{Conn: conn}
 }
 
-// ===== Server Implementation =====
 func NewServer(host string, port, workerCount, queueSize int) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
@@ -120,7 +117,6 @@ func (s *Server) Start() error {
 
 	go s.acceptLoop()
 
-	// Handle OS signals for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
@@ -162,7 +158,6 @@ func (s *Server) Stop() {
 	log.Println("Server stopped gracefully")
 }
 
-// ===== Connection Handler =====
 func handleConnection(conn net.Conn, workerID int) {
 	defer conn.Close()
 
