@@ -1,146 +1,200 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"fmt"
-	"io"
+	"log"
 	"net"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
+	"time"
 )
 
 const (
-	BUFFER_SIZE       = 2048
-	THREAD_QUEUE_SIZE = 100
-	THREAD_POOL_SIZE  = 5
+	DefaultBufferSize  = 2048
+	DefaultQueueSize   = 100
+	DefaultWorkerCount = 5
 )
 
-type Message struct {
-	WorkerId int
-	From     string
-	Data     []byte
+type Job struct {
+	Conn net.Conn
+}
+
+type Worker struct {
+	ID      int
+	JobChan chan Job
+}
+
+type Pool struct {
+	JobQueue chan Job
+	Workers  []*Worker
+	Wg       sync.WaitGroup
 }
 
 type Server struct {
 	Host       string
 	Port       int
-	Ln         net.Listener
-	Msgch      chan Message
-	quitch     chan struct{}
-	ThreadPool *ThreadPool
+	Pool       *Pool
+	Listener   net.Listener
+	quit       chan struct{}
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
-type ThreadPool struct {
-	Wg          sync.WaitGroup
-	ThreadQueue chan Thread
+// ===== Worker Implementation =====
+func NewWorker(id int, jobChan chan Job) *Worker {
+	return &Worker{ID: id, JobChan: jobChan}
 }
 
-type Thread struct {
-	Conn net.Conn
+func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case job, ok := <-w.JobChan:
+				if !ok {
+					return
+				}
+				log.Printf("[Worker %d] Handling connection from %s", w.ID, job.Conn.RemoteAddr())
+				handleConnection(job.Conn, w.ID)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
-func NewServer(host string, port int) *Server {
+// ===== Pool Implementation =====
+func NewPool(workerCount, queueSize int) *Pool {
+	return &Pool{
+		JobQueue: make(chan Job, queueSize),
+		Workers:  make([]*Worker, workerCount),
+	}
+}
+
+func (p *Pool) Start(ctx context.Context) {
+	for i := range p.Workers {
+		worker := NewWorker(i, p.JobQueue)
+		p.Workers[i] = worker
+		worker.Start(ctx, &p.Wg)
+	}
+}
+
+func (p *Pool) Stop() {
+	close(p.JobQueue)
+	p.Wg.Wait()
+}
+
+func (p *Pool) AddJob(conn net.Conn) {
+	p.JobQueue <- Job{Conn: conn}
+}
+
+// ===== Server Implementation =====
+func NewServer(host string, port, workerCount, queueSize int) *Server {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		Host:       host,
 		Port:       port,
-		Msgch:      make(chan Message),
-		quitch:     make(chan struct{}),
-		ThreadPool: NewThreadPool(THREAD_POOL_SIZE),
+		Pool:       NewPool(workerCount, queueSize),
+		quit:       make(chan struct{}),
+		ctx:        ctx,
+		cancelFunc: cancel,
 	}
-}
-
-func NewThreadPool(poolSize int) *ThreadPool {
-	pool := &ThreadPool{
-		ThreadQueue: make(chan Thread, THREAD_QUEUE_SIZE),
-	}
-	pool.Wg.Add(poolSize)
-
-	return pool
 }
 
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%v", s.Port))
+	addr := net.JoinHostPort(s.Host, strconv.Itoa(s.Port))
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		fmt.Println("Start Listen Err: ", err.Error())
-		return err
+		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
-	defer ln.Close()
-	s.Ln = ln
+	s.Listener = ln
+	log.Printf("Server listening on %s", addr)
 
-	fmt.Println("Server listening on", s.Ln.Addr())
+	s.Pool.Start(s.ctx)
 
-	// Start worker
-	for i := 0; i < THREAD_POOL_SIZE; i++ {
-		go s.Process(i)
+	go s.acceptLoop()
+
+	// Handle OS signals for graceful shutdown
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-signalChan:
+		log.Println("Shutdown signal received...")
+		s.Stop()
+	case <-s.quit:
+		s.Stop()
 	}
-
-	go s.AcceptListen()
-
-	<-s.quitch
-	close(s.Msgch)
-	close(s.ThreadPool.ThreadQueue)
 
 	return nil
 }
 
-func (s *Server) Process(workerId int) {
-	defer s.ThreadPool.Wg.Done()
-	for thread := range s.ThreadPool.ThreadQueue {
-		s.Read(thread.Conn, workerId)
-	}
-}
-
-func (s *Server) AcceptListen() {
+func (s *Server) acceptLoop() {
 	for {
-		conn, err := s.Ln.Accept()
+		conn, err := s.Listener.Accept()
 		if err != nil {
-			fmt.Println("Accept Listen Err: ", err.Error())
-			continue
-		}
-
-		fmt.Println("New connection to the server: ", conn.RemoteAddr().String())
-
-		s.ThreadPool.ThreadQueue <- Thread{
-			Conn: conn,
-		}
-	}
-}
-
-func (s *Server) Read(conn net.Conn, workerId int) {
-	defer conn.Close()
-	buf := make([]byte, BUFFER_SIZE)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("Client disconnected:", conn.RemoteAddr())
+			select {
+			case <-s.ctx.Done():
 				return
+			default:
+				log.Printf("Accept error: %v", err)
+				continue
 			}
-			fmt.Println("Read error:", err)
-			continue
 		}
-
-		msg := buf[:n]
-		s.Msgch <- Message{
-			WorkerId: workerId,
-			From:     conn.RemoteAddr().String(),
-			Data:     msg,
-		}
-
-		conn.Write([]byte("Thank you for your message from workerId " + strconv.Itoa(workerId) + " !\n"))
+		log.Printf("New connection from %s", conn.RemoteAddr())
+		s.Pool.AddJob(conn)
 	}
 }
 
-func main() {
-	server := NewServer("localhost", 3000)
+func (s *Server) Stop() {
+	s.cancelFunc()
+	if s.Listener != nil {
+		s.Listener.Close()
+	}
+	s.Pool.Stop()
+	close(s.quit)
+	log.Println("Server stopped gracefully")
+}
 
-	go func() {
-		for msg := range server.Msgch {
-			fmt.Println("Addr: " + msg.From + ", WorkerId: " + strconv.Itoa(msg.WorkerId) + " : " + string(msg.Data))
+// ===== Connection Handler =====
+func handleConnection(conn net.Conn, workerID int) {
+	defer conn.Close()
+
+	reader := bufio.NewReader(conn)
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // prevent idle hang
+		data, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("[Worker %d] Client %s disconnected", workerID, conn.RemoteAddr())
+			return
 		}
-	}()
 
-	err := server.Start()
-	if err != nil {
-		fmt.Println(err.Error())
+		msg := fmt.Sprintf("Worker %d received: %s", workerID, data)
+		log.Print(msg)
+
+		// Example: respond like HTTP for demonstration
+		if data == "GET / HTTP/1.1\r\n" {
+			response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello from Master Server\r\n"
+			conn.Write([]byte(response))
+			return // close after one HTTP response
+		}
+
+		// Echo back
+		conn.Write([]byte("Echo from worker " + strconv.Itoa(workerID) + ": " + data))
+	}
+}
+
+// ===== Main =====
+func main() {
+	server := NewServer("0.0.0.0", 3000, DefaultWorkerCount, DefaultQueueSize)
+	if err := server.Start(); err != nil {
+		log.Fatal(err)
 	}
 }
