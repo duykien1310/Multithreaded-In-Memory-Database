@@ -1,162 +1,126 @@
 package server
 
 import (
-	"backend/internal/netutil"
-	"backend/internal/poller"
-	"errors"
+	"backend/internal/constant"
+	"backend/internal/io_multiplxeing/event"
+	"backend/internal/io_multiplxeing/poller"
 	"fmt"
+	"io"
 	"log"
-	"sync"
+	"net"
 	"syscall"
 )
 
-// Handler defines pluggable protocol logic (e.g., RESP, line-based, etc.).
-type Handler interface {
-	// OnRead is called when bytes arrive. Return reply bytes (may be nil) and
-	// whether to close the connection after writing.
-	OnRead(fd int, in []byte) (out []byte, closeAfterWrite bool, err error)
-}
-
-// Server owns the listening socket, poller, and connection buffers.
 type Server struct {
-	addr       string
-	lpfd       int           // listening socket fd
-	p          poller.Poller // epoll/kqueue underneath
-	handler    Handler
-	mu         sync.Mutex
-	connBufMap map[int][]byte // per-connection read buffer
+	host     string
+	port     int
+	protocol string
 }
 
-func New(addr string, h Handler) (*Server, error) {
-	lpfd, sa, err := netutil.NewTCPListenerFD(addr)
-	if err != nil {
-		return nil, err
-	}
-	p, err := poller.New()
-	if err != nil {
-		return nil, err
-	}
-	if err := p.Add(lpfd, poller.EvRead|poller.EvEdge); err != nil {
-		return nil, fmt.Errorf("add listen fd: %w", err)
-	}
-	log.Printf("listen socket ready: %s", netutil.PrettySockaddr(sa))
-
+func NewServer(host string, port int, protocol string) *Server {
 	return &Server{
-		addr:       addr,
-		lpfd:       lpfd,
-		p:          p,
-		handler:    h,
-		connBufMap: make(map[int][]byte),
-	}, nil
+		host:     host,
+		port:     port,
+		protocol: protocol,
+	}
 }
 
-func (s *Server) Serve() error {
-	defer syscall.Close(s.lpfd)
+func (s *Server) Start() error {
+	log.Printf("I/O multiplexing server listening on %s:%v", s.host, s.port)
+	listener, err := net.Listen(s.protocol, fmt.Sprintf(":%v", s.port))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
 
-	events := make([]poller.Event, 256)
-	tmp := make([]byte, 4096)
+	// Get the file descriptor from the listener
+	tcpListener, ok := listener.(*net.TCPListener)
+	if !ok {
+		log.Fatal("listener is not a TCPListener")
+	}
+	listenerFile, err := tcpListener.File()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listenerFile.Close()
 
+	lnFd := int(listenerFile.Fd())
+
+	// Create a poller instance (epoll in Linux, kqueue in MacOS)
+	poller, err := poller.CreatePoller()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer poller.Close()
+
+	// Monitor "read" events on the Server FD
+	if err = poller.Monitor(event.Event{
+		Fd: lnFd,
+		Op: constant.OpRead,
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	var events = make([]event.Event, constant.MaxConnection)
 	for {
-		n, err := s.p.Wait(events)
+		// wait for file descriptors in the monitoring list to be ready for I/O
+		// it is a blocking call.
+		events, err = poller.Wait()
 		if err != nil {
-			if errors.Is(err, syscall.EINTR) {
-				continue
-			}
-			return fmt.Errorf("poller wait: %w", err)
+			continue
 		}
-		for i := 0; i < n; i++ {
-			ev := events[i]
-			fd := ev.FD
 
-			if ev.HasErr() || ev.HasHup() {
-				if fd != s.lpfd {
-					s.closeClient(fd)
+		for i := 0; i < len(events); i++ {
+			if events[i].Fd == lnFd {
+				log.Printf("new client is trying to connect")
+				// set up new connection
+				connFd, _, err := syscall.Accept(lnFd)
+				if err != nil {
+					log.Println("err", err)
+					continue
 				}
-				continue
-			}
-
-			if fd == s.lpfd && ev.Readable() {
-				// Accept all pending (edge-triggered)
-				for {
-					cfd, _, aerr := syscall.Accept(s.lpfd)
-					if aerr != nil {
-						if aerr == syscall.EAGAIN || aerr == syscall.EWOULDBLOCK {
-							break
-						}
-						log.Printf("accept: %v", aerr)
-						break
-					}
-					_ = netutil.SetNonblock(cfd)
-					_ = s.p.Add(cfd, poller.EvRead|poller.EvEdge)
-					log.Printf("accepted %v fd=%d", aerr, cfd)
+				log.Printf("set up a new connection")
+				// ask epoll to monitor this connection
+				if err = poller.Monitor(event.Event{
+					Fd: connFd,
+					Op: constant.OpRead,
+				}); err != nil {
+					log.Fatal(err)
 				}
-				continue
-			}
-
-			if ev.Readable() {
-				// Drain reads until EAGAIN
-				for {
-					nread, rerr := syscall.Read(fd, tmp)
-					if nread > 0 {
-						s.appendBuf(fd, tmp[:nread])
-						// Try handling as much as handler wants (here: single pass)
-						out, closeAfter, herr := s.handler.OnRead(fd, s.getBuf(fd))
-						if herr != nil {
-							// Protocol error → close
-							s.closeClient(fd)
-							break
-						}
-						if len(out) > 0 {
-							// Best-effort write (short writes possible)
-							if _, werr := syscall.Write(fd, out); werr != nil && werr != syscall.EAGAIN {
-								s.closeClient(fd)
-								break
-							}
-						}
-						if closeAfter {
-							s.closeClient(fd)
-							break
-						}
-						// Reset buffer if handler consumed it all
-						s.clearBuf(fd)
+			} else {
+				cmd, err := readCommand(events[i].Fd)
+				if err != nil {
+					if err == io.EOF || err == syscall.ECONNRESET {
+						log.Println("client disconnected")
+						syscall.Close(events[i].Fd)
 						continue
 					}
-					if rerr != nil {
-						if rerr == syscall.EAGAIN || rerr == syscall.EWOULDBLOCK {
-							break
-						}
-						s.closeClient(fd)
-						break
-					}
-					if nread == 0 {
-						s.closeClient(fd)
-						break
-					}
+					log.Println("read error:", err)
+					continue
 				}
+
+				// Handle command (Continue)
+				fmt.Println(cmd)
 			}
 		}
 	}
 }
 
-func (s *Server) appendBuf(fd int, b []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connBufMap[fd] = append(s.connBufMap[fd], b...)
+func readCommand(fd int) (string, error) {
+	var buf = make([]byte, 512)
+	n, err := syscall.Read(fd, buf)
+	if err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", io.EOF
+	}
+	return string(buf), nil
 }
-func (s *Server) getBuf(fd int) []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]byte(nil), s.connBufMap[fd]...)
-}
-func (s *Server) clearBuf(fd int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connBufMap[fd] = s.connBufMap[fd][:0]
-}
-func (s *Server) closeClient(fd int) {
-	_ = s.p.Del(fd)
-	_ = syscall.Close(fd)
-	s.mu.Lock()
-	delete(s.connBufMap, fd)
-	s.mu.Unlock()
+
+func respond(data string, fd int) error {
+	if _, err := syscall.Write(fd, []byte(data)); err != nil {
+		return err
+	}
+	return nil
 }

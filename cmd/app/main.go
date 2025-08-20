@@ -1,28 +1,24 @@
 package main
 
 import (
-	"backend/internal/proto/echo"
+	"backend/internal/config"
 	"backend/internal/server"
-	"flag"
 	"log"
-	"net"
-	"strconv"
 )
 
+func init() {
+	config.SetConfigFile("../../internal/config")
+}
+
 func main() {
-	host := flag.String("host", "0.0.0.0", "listen host")
-	port := flag.Int("port", 6380, "listen port")
-	flag.Parse()
-
-	addr := net.JoinHostPort(*host, strconv.Itoa(*port))
-
-	s, err := server.New(addr, echo.NewHandler())
-	if err != nil {
-		log.Fatal(err)
+	config := config.EnvConfig{
+		Host:     config.GetString("host.address"),
+		Port:     config.GetInt("host.port"),
+		Protocol: config.GetString("protocol"),
 	}
 
-	log.Printf("I/O multiplexing server listening on %s", addr)
-	if err := s.Serve(); err != nil {
+	s := server.NewServer(config.Host, config.Port, config.Protocol)
+	if err := s.Start(); err != nil {
 		log.Fatal(err)
 	}
 }
