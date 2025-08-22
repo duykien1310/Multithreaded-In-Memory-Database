@@ -28,7 +28,7 @@ func CreatePoller() (*KQueue, error) {
 }
 
 func (kq *KQueue) Monitor(event entity.Event) error {
-	kqEvent := event.ToNative(syscall.EV_ADD)
+	kqEvent := toNative(event, syscall.EV_ADD)
 	// Add event.Fd to the monitoring list of kq.fd
 	_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{kqEvent}, nil, nil)
 
@@ -41,7 +41,7 @@ func (kq *KQueue) Wait() ([]entity.Event, error) {
 		return nil, err
 	}
 	for i := 0; i < n; i++ {
-		kq.genericEvents[i] = entity.CreateEvent(kq.kqEvents[i])
+		kq.genericEvents[i] = createEvent(kq.kqEvents[i])
 	}
 
 	return kq.genericEvents[:n], nil
@@ -49,4 +49,27 @@ func (kq *KQueue) Wait() ([]entity.Event, error) {
 
 func (kq *KQueue) Close() error {
 	return syscall.Close(kq.fd)
+}
+
+func toNative(e entity.Event, flags uint16) syscall.Kevent_t {
+	var filter int16 = syscall.EVFILT_WRITE
+	if e.Op == constant.OpRead {
+		filter = syscall.EVFILT_READ
+	}
+	return syscall.Kevent_t{
+		Ident:  uint64(e.Fd),
+		Filter: filter,
+		Flags:  flags,
+	}
+}
+
+func createEvent(kq syscall.Kevent_t) entity.Event {
+	var op uint32 = constant.OpWrite
+	if kq.Filter == syscall.EVFILT_READ {
+		op = constant.OpRead
+	}
+	return entity.Event{
+		Fd: int(kq.Ident),
+		Op: op,
+	}
 }
