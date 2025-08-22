@@ -4,7 +4,6 @@ import (
 	"backend/internal/entity"
 	"backend/internal/protocol/resp"
 	"errors"
-	"fmt"
 	"syscall"
 )
 
@@ -15,7 +14,7 @@ func HandleCmd(cmd *entity.Command, connFd int) error {
 	case "PING":
 		res = cmdPING(cmd.Args)
 	default:
-		res = []byte(fmt.Sprintf("-CMD NOT FOUND\r\n"))
+		res = []byte("-CMD NOT FOUND\r\n")
 	}
 	_, err := syscall.Write(connFd, res)
 	return err
