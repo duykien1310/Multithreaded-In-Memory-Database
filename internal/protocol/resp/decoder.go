@@ -12,6 +12,10 @@ func ParseCmd(data []byte) (*entity.Command, error) {
 		return nil, err
 	}
 
+	if value == nil {
+		return &entity.Command{Cmd: "", Args: []string{}}, nil
+	}
+
 	array := value.([]interface{})
 	tokens := make([]string, len(array))
 	for i := range tokens {
