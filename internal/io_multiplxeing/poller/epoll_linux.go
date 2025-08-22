@@ -2,7 +2,7 @@ package poller
 
 import (
 	"backend/internal/constant"
-	"backend/internal/io_multiplxeing/event"
+	"backend/internal/entity"
 	"log"
 	"syscall"
 )
@@ -10,7 +10,7 @@ import (
 type Epoll struct {
 	fd            int
 	epollEvents   []syscall.EpollEvent
-	genericEvents []event.Event
+	genericEvents []entity.Event
 }
 
 func CreatePoller() (*Epoll, error) {
@@ -23,23 +23,23 @@ func CreatePoller() (*Epoll, error) {
 	return &Epoll{
 		fd:            epollFD,
 		epollEvents:   make([]syscall.EpollEvent, constant.MaxConnection),
-		genericEvents: make([]event.Event, constant.MaxConnection),
+		genericEvents: make([]entity.Event, constant.MaxConnection),
 	}, nil
 }
 
-func (ep *Epoll) Monitor(event event.Event) error {
+func (ep *Epoll) Monitor(event entity.Event) error {
 	epollEvent := event.ToNative()
 	// Add event.Fd to the monitoring list of ep.fd
 	return syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_ADD, event.Fd, &epollEvent)
 }
 
-func (ep *Epoll) Wait() ([]event.Event, error) {
+func (ep *Epoll) Wait() ([]entity.Event, error) {
 	n, err := syscall.EpollWait(ep.fd, ep.epollEvents, -1)
 	if err != nil {
 		return nil, err
 	}
 	for i := 0; i < n; i++ {
-		ep.genericEvents[i] = event.CreateEvent(ep.epollEvents[i])
+		ep.genericEvents[i] = entity.CreateEvent(ep.epollEvents[i])
 	}
 
 	return ep.genericEvents[:n], nil

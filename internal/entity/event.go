@@ -1,4 +1,4 @@
-package event
+package entity
 
 type Event struct {
 	Fd int

@@ -2,7 +2,7 @@ package poller
 
 import (
 	"backend/internal/constant"
-	"backend/internal/io_multiplxeing/event"
+	"backend/internal/entity"
 	"log"
 	"syscall"
 )
@@ -10,7 +10,7 @@ import (
 type KQueue struct {
 	fd            int
 	kqEvents      []syscall.Kevent_t
-	genericEvents []event.Event
+	genericEvents []entity.Event
 }
 
 func CreatePoller() (*KQueue, error) {
@@ -23,11 +23,11 @@ func CreatePoller() (*KQueue, error) {
 	return &KQueue{
 		fd:            epollFD,
 		kqEvents:      make([]syscall.Kevent_t, constant.MaxConnection),
-		genericEvents: make([]event.Event, constant.MaxConnection),
+		genericEvents: make([]entity.Event, constant.MaxConnection),
 	}, nil
 }
 
-func (kq *KQueue) Monitor(event event.Event) error {
+func (kq *KQueue) Monitor(event entity.Event) error {
 	kqEvent := event.ToNative(syscall.EV_ADD)
 	// Add event.Fd to the monitoring list of kq.fd
 	_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{kqEvent}, nil, nil)
@@ -35,13 +35,13 @@ func (kq *KQueue) Monitor(event event.Event) error {
 	return err
 }
 
-func (kq *KQueue) Wait() ([]event.Event, error) {
+func (kq *KQueue) Wait() ([]entity.Event, error) {
 	n, err := syscall.Kevent(kq.fd, nil, kq.kqEvents, nil) // It will sleep
 	if err != nil {
 		return nil, err
 	}
 	for i := 0; i < n; i++ {
-		kq.genericEvents[i] = event.CreateEvent(kq.kqEvents[i])
+		kq.genericEvents[i] = entity.CreateEvent(kq.kqEvents[i])
 	}
 
 	return kq.genericEvents[:n], nil
