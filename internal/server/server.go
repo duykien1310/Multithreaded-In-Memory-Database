@@ -121,10 +121,3 @@ func readCommand(fd int) (*entity.Command, error) {
 	}
 	return resp.ParseCmd(buf)
 }
-
-func respond(data string, fd int) error {
-	if _, err := syscall.Write(fd, []byte(data)); err != nil {
-		return err
-	}
-	return nil
-}
