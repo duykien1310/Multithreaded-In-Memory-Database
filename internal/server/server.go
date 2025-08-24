@@ -1,9 +1,11 @@
 package server
 
 import (
+	"backend/internal/command"
 	"backend/internal/constant"
-	"backend/internal/io_multiplxeing/event"
+	"backend/internal/entity"
 	"backend/internal/io_multiplxeing/poller"
+	"backend/internal/protocol/resp"
 	"fmt"
 	"io"
 	"log"
@@ -54,14 +56,14 @@ func (s *Server) Start() error {
 	defer poller.Close()
 
 	// Monitor "read" events on the Server FD
-	if err = poller.Monitor(event.Event{
+	if err = poller.Monitor(entity.Event{
 		Fd: lnFd,
 		Op: constant.OpRead,
 	}); err != nil {
 		log.Fatal(err)
 	}
 
-	var events = make([]event.Event, constant.MaxConnection)
+	var events = make([]entity.Event, constant.MaxConnection)
 	for {
 		// wait for file descriptors in the monitoring list to be ready for I/O
 		// it is a blocking call.
@@ -81,7 +83,7 @@ func (s *Server) Start() error {
 				}
 				log.Printf("set up a new connection")
 				// ask epoll to monitor this connection
-				if err = poller.Monitor(event.Event{
+				if err = poller.Monitor(entity.Event{
 					Fd: connFd,
 					Op: constant.OpRead,
 				}); err != nil {
@@ -100,27 +102,22 @@ func (s *Server) Start() error {
 				}
 
 				// Handle command (Continue)
-				fmt.Println(cmd)
+				if err = command.HandleCmd(cmd, events[i].Fd); err != nil {
+					log.Println("handle err:", err)
+				}
 			}
 		}
 	}
 }
 
-func readCommand(fd int) (string, error) {
+func readCommand(fd int) (*entity.Command, error) {
 	var buf = make([]byte, 512)
 	n, err := syscall.Read(fd, buf)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if n == 0 {
-		return "", io.EOF
+		return nil, io.EOF
 	}
-	return string(buf), nil
-}
-
-func respond(data string, fd int) error {
-	if _, err := syscall.Write(fd, []byte(data)); err != nil {
-		return err
-	}
-	return nil
+	return resp.ParseCmd(buf)
 }
