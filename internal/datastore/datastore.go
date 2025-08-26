@@ -2,11 +2,9 @@ package datastore
 
 type entry struct {
 	val []byte
-	// expireAt time.Time // zero => no expiry
 }
 
 type KV struct {
-	// mu sync.RWMutex
 	m map[string]entry
 }
 
