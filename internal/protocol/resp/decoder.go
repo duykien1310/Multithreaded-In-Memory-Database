@@ -1,19 +1,19 @@
 package resp
 
 import (
-	"backend/internal/entity"
+	"backend/internal/payload"
 	"errors"
 	"strings"
 )
 
-func ParseCmd(data []byte) (*entity.Command, error) {
+func ParseCmd(data []byte) (*payload.Command, error) {
 	value, err := Decode(data)
 	if err != nil {
 		return nil, err
 	}
 
 	if value == nil {
-		return &entity.Command{Cmd: "", Args: []string{}}, nil
+		return &payload.Command{Cmd: "", Args: []string{}}, nil
 	}
 
 	array := value.([]interface{})
@@ -21,7 +21,7 @@ func ParseCmd(data []byte) (*entity.Command, error) {
 	for i := range tokens {
 		tokens[i] = array[i].(string)
 	}
-	res := &entity.Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
+	res := &payload.Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
 	return res, nil
 }
 

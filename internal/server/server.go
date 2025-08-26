@@ -1,10 +1,9 @@
 package server
 
 import (
-	"backend/internal/command"
 	"backend/internal/constant"
-	"backend/internal/entity"
 	"backend/internal/io_multiplxeing/poller"
+	"backend/internal/payload"
 	"backend/internal/protocol/resp"
 	"fmt"
 	"io"
@@ -13,17 +12,23 @@ import (
 	"syscall"
 )
 
+type Handler interface {
+	HandleCmd(cmd *payload.Command, connFd int) error
+}
+
 type Server struct {
 	host     string
 	port     int
 	protocol string
+	h        Handler
 }
 
-func NewServer(host string, port int, protocol string) *Server {
+func NewServer(host string, port int, protocol string, h Handler) *Server {
 	return &Server{
 		host:     host,
 		port:     port,
 		protocol: protocol,
+		h:        h,
 	}
 }
 
@@ -56,14 +61,14 @@ func (s *Server) Start() error {
 	defer poller.Close()
 
 	// Monitor "read" events on the Server FD
-	if err = poller.Monitor(entity.Event{
+	if err = poller.Monitor(payload.Event{
 		Fd: lnFd,
 		Op: constant.OpRead,
 	}); err != nil {
 		log.Fatal(err)
 	}
 
-	var events = make([]entity.Event, constant.MaxConnection)
+	var events = make([]payload.Event, constant.MaxConnection)
 	for {
 		// wait for file descriptors in the monitoring list to be ready for I/O
 		// it is a blocking call.
@@ -83,7 +88,7 @@ func (s *Server) Start() error {
 				}
 				log.Printf("set up a new connection")
 				// ask epoll to monitor this connection
-				if err = poller.Monitor(entity.Event{
+				if err = poller.Monitor(payload.Event{
 					Fd: connFd,
 					Op: constant.OpRead,
 				}); err != nil {
@@ -102,7 +107,7 @@ func (s *Server) Start() error {
 				}
 
 				// Handle command (Continue)
-				if err = command.HandleCmd(cmd, events[i].Fd); err != nil {
+				if err = s.h.HandleCmd(cmd, events[i].Fd); err != nil {
 					log.Println("handle err:", err)
 				}
 			}
@@ -110,7 +115,7 @@ func (s *Server) Start() error {
 	}
 }
 
-func readCommand(fd int) (*entity.Command, error) {
+func readCommand(fd int) (*payload.Command, error) {
 	var buf = make([]byte, 512)
 	n, err := syscall.Read(fd, buf)
 	if err != nil {
