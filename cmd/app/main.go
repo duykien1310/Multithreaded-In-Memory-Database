@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/command"
 	"backend/internal/config"
 	"backend/internal/server"
 	"log"
@@ -17,7 +18,9 @@ func main() {
 		Protocol: config.GetString("protocol"),
 	}
 
-	s := server.NewServer(config.Host, config.Port, config.Protocol)
+	h := command.NewHandler()
+
+	s := server.NewServer(config.Host, config.Port, config.Protocol, h)
 	if err := s.Start(); err != nil {
 		log.Fatal(err)
 	}

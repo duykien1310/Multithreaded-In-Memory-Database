@@ -2,7 +2,7 @@ package poller
 
 import (
 	"backend/internal/constant"
-	"backend/internal/entity"
+	"backend/internal/payload"
 	"log"
 	"syscall"
 )
@@ -10,7 +10,7 @@ import (
 type KQueue struct {
 	fd            int
 	kqEvents      []syscall.Kevent_t
-	genericEvents []entity.Event
+	genericEvents []payload.Event
 }
 
 func CreatePoller() (*KQueue, error) {
@@ -23,11 +23,11 @@ func CreatePoller() (*KQueue, error) {
 	return &KQueue{
 		fd:            epollFD,
 		kqEvents:      make([]syscall.Kevent_t, constant.MaxConnection),
-		genericEvents: make([]entity.Event, constant.MaxConnection),
+		genericEvents: make([]payload.Event, constant.MaxConnection),
 	}, nil
 }
 
-func (kq *KQueue) Monitor(event entity.Event) error {
+func (kq *KQueue) Monitor(event payload.Event) error {
 	kqEvent := toNative(event, syscall.EV_ADD)
 	// Add event.Fd to the monitoring list of kq.fd
 	_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{kqEvent}, nil, nil)
@@ -35,7 +35,7 @@ func (kq *KQueue) Monitor(event entity.Event) error {
 	return err
 }
 
-func (kq *KQueue) Wait() ([]entity.Event, error) {
+func (kq *KQueue) Wait() ([]payload.Event, error) {
 	n, err := syscall.Kevent(kq.fd, nil, kq.kqEvents, nil) // It will sleep
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (kq *KQueue) Close() error {
 	return syscall.Close(kq.fd)
 }
 
-func toNative(e entity.Event, flags uint16) syscall.Kevent_t {
+func toNative(e payload.Event, flags uint16) syscall.Kevent_t {
 	var filter int16 = syscall.EVFILT_WRITE
 	if e.Op == constant.OpRead {
 		filter = syscall.EVFILT_READ
@@ -63,12 +63,12 @@ func toNative(e entity.Event, flags uint16) syscall.Kevent_t {
 	}
 }
 
-func createEvent(kq syscall.Kevent_t) entity.Event {
+func createEvent(kq syscall.Kevent_t) payload.Event {
 	var op uint32 = constant.OpWrite
 	if kq.Filter == syscall.EVFILT_READ {
 		op = constant.OpRead
 	}
-	return entity.Event{
+	return payload.Event{
 		Fd: int(kq.Ident),
 		Op: op,
 	}
