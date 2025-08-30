@@ -124,3 +124,30 @@ func (kv *KV) Persist(key string) bool {
 
 	return true
 }
+
+func (kv *KV) Exists(listKey []string) int {
+	count := 0
+	for _, key := range listKey {
+		e, ok := kv.m[key]
+		if !ok || (e.expireAt != nil && time.Now().After(*e.expireAt)) {
+			continue
+		}
+		count++
+	}
+
+	return count
+}
+
+func (kv *KV) Del(listKey []string) int {
+	count := 0
+	for _, key := range listKey {
+		e, ok := kv.m[key]
+		if !ok || (e.expireAt != nil && time.Now().After(*e.expireAt)) {
+			continue
+		}
+		count++
+		delete(kv.m, key)
+	}
+
+	return count
+}

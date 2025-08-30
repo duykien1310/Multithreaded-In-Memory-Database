@@ -41,6 +41,10 @@ func (h *Handler) HandleCmd(cmd *payload.Command, connFd int) error {
 		res = h.cmdPExpire(cmd.Args)
 	case "PERSIST":
 		res = h.cmdPersist(cmd.Args)
+	case "EXISTS":
+		res = h.cmdExists(cmd.Args)
+	case "DEL":
+		res = h.cmdDel(cmd.Args)
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")
 	}
@@ -169,4 +173,24 @@ func (h *Handler) cmdPersist(args []string) []byte {
 	}
 
 	return resp.Encode(strconv.Itoa(0), true)
+}
+
+func (h *Handler) cmdExists(args []string) []byte {
+	if len(args) < 1 {
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'exists' command"), false)
+	}
+
+	count := h.kv.Exists(args)
+
+	return resp.Encode(strconv.Itoa(count), true)
+}
+
+func (h *Handler) cmdDel(args []string) []byte {
+	if len(args) < 1 {
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'del' command"), false)
+	}
+
+	count := h.kv.Del(args)
+
+	return resp.Encode(strconv.Itoa(count), true)
 }
