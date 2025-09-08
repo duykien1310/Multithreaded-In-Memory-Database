@@ -46,6 +46,10 @@ func (h *Handler) HandleCmd(cmd *payload.Command, connFd int) error {
 		res = h.cmdSADD(cmd.Args)
 	case "SMEMBERS":
 		res = h.cmdSMembers(cmd.Args)
+	case "SISMEMBER":
+		res = h.SIsMember(cmd.Args)
+	case "SMISMEMBER":
+		res = h.SMIsMember(cmd.Args)
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")
 	}

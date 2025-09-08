@@ -19,6 +19,20 @@ func encodeStringArray(sa []string) []byte {
 	return []byte(fmt.Sprintf("*%d\r\n%s", len(sa), buf.Bytes()))
 }
 
+func encodeInt(v int) []byte {
+	return []byte(fmt.Sprintf(":%d\r\n", v))
+}
+
+func encodeIntArray(sa []int) []byte {
+	var b []byte
+	buf := bytes.NewBuffer(b)
+	for _, s := range sa {
+		buf.Write(encodeInt(s))
+
+	}
+	return []byte(fmt.Sprintf("*%d\r\n%s", len(sa), buf.Bytes()))
+}
+
 // raw data => RESP format data
 func Encode(value interface{}, isSimpleString bool) []byte {
 	switch v := value.(type) {
@@ -33,6 +47,8 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 		return []byte(fmt.Sprintf("-%s\r\n", v))
 	case []string:
 		return encodeStringArray(value.([]string))
+	case []int:
+		return encodeIntArray(value.([]int))
 	case [][]string:
 		var b []byte
 		buf := bytes.NewBuffer(b)

@@ -41,3 +41,32 @@ func (s *SimpleSet) SMembers(key string) []string {
 	}
 	return m
 }
+
+func (s *SimpleSet) SIsMember(key string, member string) int {
+	if _, ok := s.m[key]; !ok {
+		return 0
+	}
+
+	if _, ok := s.m[key].mapVal[member]; !ok {
+		return 0
+	}
+
+	return 1
+}
+
+func (s *SimpleSet) SMIsMember(key string, members []string) []int {
+	n := len(members)
+
+	if _, ok := s.m[key]; !ok {
+		return make([]int, n)
+	}
+
+	rs := make([]int, n)
+	for i, m := range members {
+		if _, ok := s.m[key].mapVal[m]; ok {
+			rs[i] = 1
+		}
+	}
+
+	return rs
+}
