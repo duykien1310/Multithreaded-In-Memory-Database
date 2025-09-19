@@ -64,6 +64,10 @@ func (h *Handler) HandleCmd(cmd *payload.Command, connFd int) error {
 		res = h.cmdZRANK(cmd.Args)
 	case "ZCARD":
 		res = h.cmdZCARD(cmd.Args)
+	case "ZRANGE":
+		res = h.cmdZRANGE(cmd.Args)
+	case "ZREM":
+		res = h.cmdZREM(cmd.Args)
 
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")

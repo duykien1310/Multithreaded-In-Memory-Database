@@ -1,6 +1,9 @@
 package datastore
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Assume bptree, bptKey, etc. are defined elsewhere in package datastore.
 
@@ -100,7 +103,7 @@ func (z *ZSetBPTree) ZRank(key string, member string) (int, bool) {
 }
 
 // ZRange by rank (inclusive indices)
-func (z *ZSetBPTree) ZRange(key string, start, stop int) []bptKey {
+func (z *ZSetBPTree) ZRange(key string, start, stop int) []string {
 	z.mu.RLock()
 	defer z.mu.RUnlock()
 
@@ -108,7 +111,33 @@ func (z *ZSetBPTree) ZRange(key string, start, stop int) []bptKey {
 	if ent == nil {
 		return nil
 	}
-	return ent.tree.rangeByRank(start, stop)
+
+	bptKeys := ent.tree.rangeByRank(start, stop)
+	rs := []string{}
+	for _, key := range bptKeys {
+		rs = append(rs, key.member)
+	}
+
+	return rs
+}
+
+func (z *ZSetBPTree) ZRangeWithScore(key string, start, stop int) []string {
+	z.mu.RLock()
+	defer z.mu.RUnlock()
+
+	ent := z.m[key]
+	if ent == nil {
+		return nil
+	}
+
+	bptKeys := ent.tree.rangeByRank(start, stop)
+	rs := []string{}
+	for _, key := range bptKeys {
+		rs = append(rs, key.member)
+		rs = append(rs, fmt.Sprintf("%.2f", key.score))
+	}
+
+	return rs
 }
 
 // ZRem removes a member and returns true if removed

@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 func (h *Handler) cmdZADD(args []string) []byte {
 	if len(args) < 3 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'ZADD' command"), false)
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZADD' command"), false)
 	}
 	key := args[0]
 	scoreIndex := 1
@@ -25,7 +26,7 @@ func (h *Handler) cmdZADD(args []string) []byte {
 		member := args[i+1]
 		score, err := strconv.ParseFloat(args[i], 64)
 		if err != nil {
-			return resp.Encode(errors.New("(error) Score must be floating point number"), false)
+			return resp.Encode(errors.New("Score must be floating point number"), false)
 		}
 		ret := h.zset.ZADD(key, score, member)
 		if ret != 1 {
@@ -38,7 +39,7 @@ func (h *Handler) cmdZADD(args []string) []byte {
 
 func (h *Handler) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'ZSCORE' command"), false)
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZSCORE' command"), false)
 	}
 
 	key, member := args[0], args[1]
@@ -52,7 +53,7 @@ func (h *Handler) cmdZSCORE(args []string) []byte {
 
 func (h *Handler) cmdZRANK(args []string) []byte {
 	if len(args) != 2 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'ZRANK' command"), false)
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZRANK' command"), false)
 	}
 
 	key, member := args[0], args[1]
@@ -66,9 +67,57 @@ func (h *Handler) cmdZRANK(args []string) []byte {
 
 func (h *Handler) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'ZCARD' command"), false)
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZCARD' command"), false)
 	}
 
 	key := args[0]
 	return resp.Encode(h.zset.ZCard(key), false)
+}
+
+func (h *Handler) cmdZRANGE(args []string) []byte {
+	withScores := false
+	if len(args) < 3 {
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZRANGE' command"), false)
+	} else if len(args) == 4 {
+		if strings.ToUpper(args[3]) != "WITHSCORES" {
+			return resp.Encode(errors.New("ERR syntax error"), false)
+		} else {
+			withScores = true
+		}
+	}
+
+	key := args[0]
+	start, err := strconv.Atoi(args[1])
+	if err != nil {
+		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+	}
+
+	stop, err := strconv.Atoi(args[2])
+	if err != nil {
+		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+	}
+
+	if withScores {
+		return resp.Encode(h.zset.ZRangeWithScore(key, start, stop), false)
+	}
+
+	return resp.Encode(h.zset.ZRange(key, start, stop), false)
+}
+
+func (h *Handler) cmdZREM(args []string) []byte {
+	if len(args) < 2 {
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'ZREM' command"), false)
+	}
+
+	key := args[0]
+	members := args[1:]
+	deleted := 0
+
+	for _, mem := range members {
+		if h.zset.ZRem(key, mem) {
+			deleted++
+		}
+	}
+
+	return resp.Encode(deleted, false)
 }
