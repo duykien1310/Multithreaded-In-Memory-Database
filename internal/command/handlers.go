@@ -9,12 +9,14 @@ import (
 type Handler struct {
 	kv        *datastore.KV
 	simpleSet *datastore.SimpleSet
+	zset      *datastore.ZSetBPTree
 }
 
 func NewHandler() *Handler {
 	return &Handler{
 		kv:        datastore.NewKV(),
 		simpleSet: datastore.NewSimpleSet(),
+		zset:      datastore.NewZSetBPTree(),
 	}
 }
 
@@ -42,14 +44,27 @@ func (h *Handler) HandleCmd(cmd *payload.Command, connFd int) error {
 		res = h.cmdExists(cmd.Args)
 	case "DEL":
 		res = h.cmdDel(cmd.Args)
+
+	// Simple Set
 	case "SADD":
 		res = h.cmdSADD(cmd.Args)
 	case "SMEMBERS":
 		res = h.cmdSMembers(cmd.Args)
 	case "SISMEMBER":
-		res = h.SIsMember(cmd.Args)
+		res = h.cmdSIsMember(cmd.Args)
 	case "SMISMEMBER":
-		res = h.SMIsMember(cmd.Args)
+		res = h.cmdSMIsMember(cmd.Args)
+
+	// Sorted Set
+	case "ZADD":
+		res = h.cmdZADD(cmd.Args)
+	case "ZSCORE":
+		res = h.cmdZSCORE(cmd.Args)
+	case "ZRANK":
+		res = h.cmdZRANK(cmd.Args)
+	case "ZCARD":
+		res = h.cmdZCARD(cmd.Args)
+
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")
 	}
