@@ -10,6 +10,7 @@ type Handler struct {
 	kv        *datastore.KV
 	simpleSet *datastore.SimpleSet
 	zset      *datastore.ZSetBPTree
+	cms       *datastore.CMS
 }
 
 func NewHandler() *Handler {
@@ -17,6 +18,7 @@ func NewHandler() *Handler {
 		kv:        datastore.NewKV(),
 		simpleSet: datastore.NewSimpleSet(),
 		zset:      datastore.NewZSetBPTree(),
+		cms:       datastore.NewCMS(),
 	}
 }
 
@@ -68,6 +70,18 @@ func (h *Handler) HandleCmd(cmd *payload.Command, connFd int) error {
 		res = h.cmdZRANGE(cmd.Args)
 	case "ZREM":
 		res = h.cmdZREM(cmd.Args)
+
+	// CMS
+	case "CMS.INITBYDIM":
+		res = h.cmdCMSINITBYDIM(cmd.Args)
+	case "CMS.INITBYPROB":
+		res = h.cmdCMSINITBYPROB(cmd.Args)
+	case "CMS.INCRBY":
+		res = h.cmdCMSINCRBY(cmd.Args)
+	case "CMS.QUERY":
+		res = h.cmdCMSQUERY(cmd.Args)
+	case "CMS.INFO":
+		res = h.cmdINFO(cmd.Args)
 
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")
