@@ -84,7 +84,7 @@ func (h *Handler) cmdZRANGE(args []string) []byte {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	} else if len(args) == 4 {
 		if strings.ToUpper(args[3]) != "WITHSCORES" {
-			return resp.Encode(config.ERROR_SYNTAX, false)
+			return resp.Encode(config.ErrSyntaxError, false)
 		} else {
 			withScores = true
 		}
@@ -93,12 +93,12 @@ func (h *Handler) cmdZRANGE(args []string) []byte {
 	key := args[0]
 	start, err := strconv.Atoi(args[1])
 	if err != nil {
-		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
 
 	stop, err := strconv.Atoi(args[2])
 	if err != nil {
-		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
 
 	if withScores {

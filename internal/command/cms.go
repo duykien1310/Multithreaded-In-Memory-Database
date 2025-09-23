@@ -29,7 +29,7 @@ func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 	}
 
 	if !ok {
-		return resp.Encode(config.ERROR_KEY_ALREADY_EXISTS, false)
+		return resp.Encode(config.ErrKeyAlreadyExists, false)
 	}
 
 	return config.RespOk
@@ -61,7 +61,7 @@ func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 	}
 
 	if !ok {
-		return resp.Encode(config.ERROR_KEY_ALREADY_EXISTS, false)
+		return resp.Encode(config.ErrKeyAlreadyExists, false)
 	}
 
 	return config.RespOk

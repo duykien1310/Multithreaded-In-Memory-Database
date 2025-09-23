@@ -24,7 +24,7 @@ func (h *Handler) cmdPING(args []string) []byte {
 
 func (h *Handler) cmdSET(args []string) []byte {
 	if len(args) == 3 || len(args) > 4 {
-		return resp.Encode(config.ERROR_SYNTAX, false)
+		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -88,14 +88,14 @@ func (h *Handler) cmdPTTL(args []string) []byte {
 
 func (h *Handler) cmdExpire(args []string) []byte {
 	if len(args) > 2 {
-		return resp.Encode(config.ERROR_SYNTAX, false)
+		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	sec, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
 
 	if h.datastore.Expire(args[0], sec) {
@@ -107,14 +107,14 @@ func (h *Handler) cmdExpire(args []string) []byte {
 
 func (h *Handler) cmdPExpire(args []string) []byte {
 	if len(args) > 2 {
-		return resp.Encode(config.ERROR_SYNTAX, false)
+		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	miliSec, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
 
 	if h.datastore.PExpire(args[0], miliSec) {
