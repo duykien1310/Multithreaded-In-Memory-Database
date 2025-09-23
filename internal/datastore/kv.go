@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	"errors"
+	"backend/internal/config"
 	"time"
 )
 
@@ -14,16 +14,16 @@ func (s *Datastore) Set(key, val string, ttl time.Duration) {
 	s.m[key] = e
 }
 
-func (s *Datastore) Get(key string) (string, error) {
+func (s *Datastore) Get(key string) (string, bool, error) {
 	e, ok := s.getEntry(key)
 	if !ok {
-		return "", nil
+		return "", false, nil
 	}
 
 	if data, ok := e.val.(string); ok {
-		return data, nil
+		return data, true, nil
 	}
-	return "", errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	return "", false, config.ErrWrongType
 }
 
 func (s *Datastore) TTL(key string) int64 {

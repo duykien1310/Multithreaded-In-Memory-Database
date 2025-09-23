@@ -1,26 +1,38 @@
 package datastore
 
 import (
-	"errors"
+	"backend/internal/config"
 	"fmt"
 	"strconv"
 )
 
-type entryZSetBPTree struct {
+type EntryZSetBPTree struct {
 	dict map[string]float64 // member -> score
 	tree *bptree
 }
 
-func (s *Datastore) ensureZSet(key string) (*entryZSetBPTree, error) {
+func (s *Datastore) getZSet(key string) (*EntryZSetBPTree, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return nil, nil
+	}
+	zset, ok := e.val.(*EntryZSetBPTree)
+	if !ok {
+		return nil, config.ErrWrongType
+	}
+	return zset, nil
+}
+
+func (s *Datastore) ensureZSet(key string) (*EntryZSetBPTree, error) {
 	e, ok := s.m[key]
 	if ok && !s.isExpired(e) {
-		if zset, ok := e.val.(*entryZSetBPTree); ok {
+		if zset, ok := e.val.(*EntryZSetBPTree); ok {
 			return zset, nil
 		}
-		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		return nil, config.ErrWrongType
 	}
 
-	newZSet := &entryZSetBPTree{
+	newZSet := &EntryZSetBPTree{
 		dict: make(map[string]float64),
 		tree: newBPTree(),
 	}
@@ -40,7 +52,7 @@ func (s *Datastore) ZADD(key string, value []string) (int, error) {
 		member := value[i+1]
 		score, err := strconv.ParseFloat(value[i], 64)
 		if err != nil {
-			return count, errors.New("Score must be floating point number")
+			return count, config.ErrScoreIsNotFloat
 		}
 
 		if oldScore, ok := ent.dict[member]; ok {
@@ -60,40 +72,39 @@ func (s *Datastore) ZADD(key string, value []string) (int, error) {
 
 // ZSCORE
 func (s *Datastore) ZScore(key, member string) (float64, bool, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return 0, false, err
+	}
+	if zset == nil {
 		return 0, false, nil
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return 0, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
-	}
+
 	score, found := zset.dict[member]
 	return score, found, nil
 }
 
 // ZCARD
 func (s *Datastore) ZCard(key string) (int, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return 0, err
+	}
+	if zset == nil {
 		return 0, nil
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
-	}
+
 	return len(zset.dict), nil
 }
 
 // ZRANK
 func (s *Datastore) ZRank(key, member string) (int, bool, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
-		return -1, false, nil
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return -1, false, err
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return -1, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	if zset == nil {
+		return 0, false, nil
 	}
 
 	score, exists := zset.dict[member]
@@ -109,13 +120,12 @@ func (s *Datastore) ZRank(key, member string) (int, bool, error) {
 
 // ZRANGE
 func (s *Datastore) ZRange(key string, start, stop int) ([]string, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
-		return nil, nil
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return nil, err
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	if zset == nil {
+		return []string{}, nil
 	}
 
 	bptKeys := zset.tree.rangeByRank(start, stop)
@@ -128,13 +138,12 @@ func (s *Datastore) ZRange(key string, start, stop int) ([]string, error) {
 
 // ZRANGE WITHSCORES
 func (s *Datastore) ZRangeWithScore(key string, start, stop int) ([]string, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
-		return nil, nil
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return nil, err
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	if zset == nil {
+		return []string{}, nil
 	}
 
 	bptKeys := zset.tree.rangeByRank(start, stop)
@@ -148,13 +157,12 @@ func (s *Datastore) ZRangeWithScore(key string, start, stop int) ([]string, erro
 
 // ZREM
 func (s *Datastore) ZRem(key string, members []string) (int, error) {
-	e, ok := s.getEntry(key)
-	if !ok {
-		return 0, nil
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return 0, err
 	}
-	zset, ok := e.val.(*entryZSetBPTree)
-	if !ok {
-		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	if zset == nil {
+		return 0, nil
 	}
 
 	countDeleted := 0

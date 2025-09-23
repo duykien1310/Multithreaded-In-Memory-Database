@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"backend/internal/config"
 	"errors"
 	"math"
 	"sync/atomic"
@@ -8,15 +9,15 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-type entryCMS struct {
+type EntryCMS struct {
 	width   uint32
 	depth   uint32
 	counter [][]uint32
 }
 
 // CreateEntryCMS initializes a new Count-Min Sketch with given width and depth.
-func CreateEntryCMS(w uint32, d uint32) *entryCMS {
-	e := &entryCMS{
+func CreateEntryCMS(w uint32, d uint32) *EntryCMS {
+	e := &EntryCMS{
 		width: w,
 		depth: d,
 	}
@@ -37,36 +38,42 @@ func calcHash(item string, seed uint32) uint32 {
 	return murmur3.Sum32WithSeed([]byte(item), seed)
 }
 
-func (ds *Datastore) CreateCMS(key string, w, d uint32) (bool, error) {
-	if e, ok := ds.m[key]; ok {
-		if _, ok := e.val.(*entryCMS); ok {
+func (s *Datastore) getCMS(key string) (*EntryCMS, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return nil, config.ErrKeyNotExist
+	}
+	cms, ok := e.val.(*EntryCMS)
+	if !ok {
+		return nil, config.ErrWrongType
+	}
+	return cms, nil
+}
+
+func (s *Datastore) CreateCMS(key string, w, d uint32) (bool, error) {
+	if e, ok := s.m[key]; ok {
+		if _, ok := e.val.(*EntryCMS); ok {
 			return false, nil
 		}
-		return false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		return false, config.ErrWrongType
 	}
-
-	ds.m[key] = Entry{val: CreateEntryCMS(w, d)}
+	s.m[key] = Entry{val: CreateEntryCMS(w, d)}
 	return true, nil
 }
 
-func (ds *Datastore) CreateCMSByProb(key string, errRate, errProb float64) (bool, error) {
+func (s *Datastore) CreateCMSByProb(key string, errRate, errProb float64) (bool, error) {
 	w, d := CalcCMSDim(errRate, errProb)
-	return ds.CreateCMS(key, w, d)
+	return s.CreateCMS(key, w, d)
 }
 
 // IncrBy increments the estimated count of an item by 'value'.
-func (ds *Datastore) IncrBy(key, item string, value uint32) (uint32, error) {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return 0, errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) IncrBy(key, item string, value uint32) (uint32, error) {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return 0, err
 	}
 
-	minCount := ^uint32(0) // Max uint32
+	minCount := ^uint32(0)
 	for i := uint32(0); i < cms.depth; i++ {
 		hash := calcHash(item, i)
 		j := hash % cms.width
@@ -79,15 +86,10 @@ func (ds *Datastore) IncrBy(key, item string, value uint32) (uint32, error) {
 }
 
 // Count estimates the frequency of an item.
-func (ds *Datastore) Count(key, item string) (uint32, error) {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return 0, errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) Count(key, item string) (uint32, error) {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return 0, err
 	}
 
 	minCount := ^uint32(0)
@@ -103,15 +105,10 @@ func (ds *Datastore) Count(key, item string) (uint32, error) {
 }
 
 // Query multiple items
-func (ds *Datastore) Query(key string, listItem []string) ([]uint32, error) {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return nil, errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) Query(key string, listItem []string) ([]uint32, error) {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return nil, err
 	}
 
 	res := make([]uint32, len(listItem))
@@ -131,15 +128,10 @@ func (ds *Datastore) Query(key string, listItem []string) ([]uint32, error) {
 }
 
 // Reset clears all counters for a given key.
-func (ds *Datastore) Reset(key string) error {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) Reset(key string) error {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return err
 	}
 
 	for i := range cms.counter {
@@ -150,17 +142,10 @@ func (ds *Datastore) Reset(key string) error {
 	return nil
 }
 
-// Merge combines another entryCMS into this one.
-// Both must have the same width and depth.
-func (ds *Datastore) Merge(key string, other *entryCMS) error {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) Merge(key string, other *EntryCMS) error {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return err
 	}
 	if cms.width != other.width || cms.depth != other.depth {
 		return errors.New("CMS: dimensions do not match")
@@ -178,15 +163,10 @@ func (ds *Datastore) Merge(key string, other *entryCMS) error {
 }
 
 // Info returns the CMS dimensions.
-func (ds *Datastore) Info(key string) (uint32, uint32, error) {
-
-	e, ok := ds.m[key]
-	if !ok {
-		return 0, 0, errors.New("CMS: key does not exist")
-	}
-	cms, ok := e.val.(*entryCMS)
-	if !ok {
-		return 0, 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+func (s *Datastore) Info(key string) (uint32, uint32, error) {
+	cms, err := s.getCMS(key)
+	if err != nil {
+		return 0, 0, err
 	}
 	return cms.width, cms.depth, nil
 }

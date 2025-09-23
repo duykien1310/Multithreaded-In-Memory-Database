@@ -1,8 +1,8 @@
 package command
 
 import (
+	"backend/internal/config"
 	"backend/internal/protocol/resp"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +11,7 @@ import (
 func (h *Handler) cmdPING(args []string) []byte {
 	var res []byte
 	if len(args) > 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'ping' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	if len(args) == 0 {
@@ -24,9 +24,9 @@ func (h *Handler) cmdPING(args []string) []byte {
 
 func (h *Handler) cmdSET(args []string) []byte {
 	if len(args) == 3 || len(args) > 4 {
-		return resp.Encode(errors.New("ERR syntax error"), false)
+		return resp.Encode(config.ERROR_SYNTAX, false)
 	} else if len(args) < 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'set' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key, val := args[0], args[1]
@@ -51,12 +51,16 @@ func (h *Handler) cmdSET(args []string) []byte {
 
 func (h *Handler) cmdGET(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'get' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
-	val, err := h.datastore.Get(args[0])
+	val, ok, err := h.datastore.Get(args[0])
 	if err != nil {
 		return resp.Encode(err, false)
+	}
+
+	if !ok {
+		return config.RespNil
 	}
 
 	return resp.Encode(val, false)
@@ -64,7 +68,7 @@ func (h *Handler) cmdGET(args []string) []byte {
 
 func (h *Handler) cmdTTL(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'ttl' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	seconds := h.datastore.TTL(args[0])
@@ -74,7 +78,7 @@ func (h *Handler) cmdTTL(args []string) []byte {
 
 func (h *Handler) cmdPTTL(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'pttl' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	seconds := h.datastore.PTTL(args[0])
@@ -84,14 +88,14 @@ func (h *Handler) cmdPTTL(args []string) []byte {
 
 func (h *Handler) cmdExpire(args []string) []byte {
 	if len(args) > 2 {
-		return resp.Encode(errors.New("ERR syntax error"), false)
+		return resp.Encode(config.ERROR_SYNTAX, false)
 	} else if len(args) < 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'expire' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	sec, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
 	}
 
 	if h.datastore.Expire(args[0], sec) {
@@ -103,14 +107,14 @@ func (h *Handler) cmdExpire(args []string) []byte {
 
 func (h *Handler) cmdPExpire(args []string) []byte {
 	if len(args) > 2 {
-		return resp.Encode(errors.New("ERR syntax error"), false)
+		return resp.Encode(config.ERROR_SYNTAX, false)
 	} else if len(args) < 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'expire' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	miliSec, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+		return resp.Encode(config.ERROR_VALUE_NOT_INTEGER_OR_OUT_OF_RANGE, false)
 	}
 
 	if h.datastore.PExpire(args[0], miliSec) {
@@ -122,7 +126,7 @@ func (h *Handler) cmdPExpire(args []string) []byte {
 
 func (h *Handler) cmdPersist(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'persist' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	if h.datastore.Persist(args[0]) {
@@ -134,7 +138,7 @@ func (h *Handler) cmdPersist(args []string) []byte {
 
 func (h *Handler) cmdExists(args []string) []byte {
 	if len(args) < 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'exists' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	count := h.datastore.Exists(args)
@@ -144,7 +148,7 @@ func (h *Handler) cmdExists(args []string) []byte {
 
 func (h *Handler) cmdDel(args []string) []byte {
 	if len(args) < 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'del' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	count := h.datastore.Del(args)

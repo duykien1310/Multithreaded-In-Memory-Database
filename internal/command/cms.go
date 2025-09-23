@@ -1,7 +1,7 @@
 package command
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"backend/internal/protocol/resp"
 	"errors"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 
 func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INITBYDIM' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 	key := args[0]
 	width, err := strconv.ParseUint(args[1], 10, 32)
@@ -29,15 +29,15 @@ func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 	}
 
 	if !ok {
-		return resp.Encode(errors.New("CMS: key already exists"), false)
+		return resp.Encode(config.ERROR_KEY_ALREADY_EXISTS, false)
 	}
 
-	return constant.RespOk
+	return config.RespOk
 }
 
 func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INITBYPROB' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 	key := args[0]
 	errRate, err := strconv.ParseFloat(args[1], 64)
@@ -61,15 +61,15 @@ func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 	}
 
 	if !ok {
-		return resp.Encode(errors.New("CMS: key already exists"), false)
+		return resp.Encode(config.ERROR_KEY_ALREADY_EXISTS, false)
 	}
 
-	return constant.RespOk
+	return config.RespOk
 }
 
 func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INCBY' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
@@ -95,7 +95,7 @@ func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 
 func (h *Handler) cmdCMSQUERY(args []string) []byte {
 	if len(args) < 2 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.QUERY' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
@@ -110,7 +110,7 @@ func (h *Handler) cmdCMSQUERY(args []string) []byte {
 
 func (h *Handler) cmdINFO(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INFO' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]

@@ -1,13 +1,13 @@
 package command
 
 import (
+	"backend/internal/config"
 	"backend/internal/protocol/resp"
-	"errors"
 )
 
 func (h *Handler) cmdSADD(args []string) []byte {
 	if len(args) < 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'sadd' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key, members := args[0], args[1:]
@@ -21,7 +21,7 @@ func (h *Handler) cmdSADD(args []string) []byte {
 
 func (h *Handler) cmdSMembers(args []string) []byte {
 	if len(args) != 1 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'smembers' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
@@ -35,7 +35,7 @@ func (h *Handler) cmdSMembers(args []string) []byte {
 
 func (h *Handler) cmdSIsMember(args []string) []byte {
 	if len(args) != 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'sismember' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key, member := args[0], args[1]
@@ -49,7 +49,7 @@ func (h *Handler) cmdSIsMember(args []string) []byte {
 
 func (h *Handler) cmdSMIsMember(args []string) []byte {
 	if len(args) < 2 {
-		return resp.Encode(errors.New("ERR wrong number of arguments for 'smismember' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key, members := args[0], args[1:]

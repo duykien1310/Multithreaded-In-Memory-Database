@@ -1,7 +1,7 @@
 package resp
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"bytes"
 	"fmt"
 )
@@ -52,9 +52,9 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 	switch v := value.(type) {
 	case string:
 		if isSimpleString {
-			return []byte(fmt.Sprintf("+%s%s", v, constant.CRLF))
+			return []byte(fmt.Sprintf("+%s%s", v, config.CRLF))
 		}
-		return []byte(fmt.Sprintf("$%d%s%s%s", len(v), constant.CRLF, v, constant.CRLF))
+		return []byte(fmt.Sprintf("$%d%s%s%s", len(v), config.CRLF, v, config.CRLF))
 	case int64, int32, int16, int8, int, uint64, uint32, uint16, uint8, uint:
 		return []byte(fmt.Sprintf(":%d\r\n", v))
 	case error:
@@ -80,6 +80,6 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 		}
 		return []byte(fmt.Sprintf("*%d\r\n%s", len(value.([]interface{})), buf.Bytes()))
 	default:
-		return constant.RespNil
+		return config.RespNil
 	}
 }

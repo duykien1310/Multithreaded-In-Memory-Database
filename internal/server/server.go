@@ -1,7 +1,7 @@
 package server
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"backend/internal/io_multiplxeing/poller"
 	"backend/internal/payload"
 	"backend/internal/protocol/resp"
@@ -63,12 +63,12 @@ func (s *Server) Start() error {
 	// Monitor "read" events on the Server FD
 	if err = poller.Monitor(payload.Event{
 		Fd: lnFd,
-		Op: constant.OpRead,
+		Op: config.OpRead,
 	}); err != nil {
 		log.Fatal(err)
 	}
 
-	var events = make([]payload.Event, constant.MaxConnection)
+	var events = make([]payload.Event, config.MaxConnection)
 	for {
 		// wait for file descriptors in the monitoring list to be ready for I/O
 		// it is a blocking call.
@@ -90,7 +90,7 @@ func (s *Server) Start() error {
 				// ask epoll to monitor this connection
 				if err = poller.Monitor(payload.Event{
 					Fd: connFd,
-					Op: constant.OpRead,
+					Op: config.OpRead,
 				}); err != nil {
 					log.Fatal(err)
 				}
