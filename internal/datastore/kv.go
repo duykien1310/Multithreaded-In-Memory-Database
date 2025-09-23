@@ -1,153 +1,104 @@
 package datastore
 
-import "time"
+import (
+	"backend/internal/config"
+	"time"
+)
 
-type entry struct {
-	val      []byte
-	expireAt *time.Time
-}
-
-type KV struct {
-	m map[string]entry
-}
-
-func NewKV() *KV {
-	return &KV{
-		m: make(map[string]entry),
-	}
-}
-
-func (kv *KV) Set(key string, val []byte, ttl time.Duration) {
-	e := entry{
-		val: val,
-	}
+func (s *Datastore) Set(key, val string, ttl time.Duration) {
+	e := Entry{val: val}
 	if ttl > 0 {
 		expireAt := time.Now().Add(ttl)
 		e.expireAt = &expireAt
 	}
-	kv.m[key] = e
+	s.m[key] = e
 }
 
-func (kv *KV) Get(key string) ([]byte, bool) {
-	e, ok := kv.m[key]
+func (s *Datastore) Get(key string) (string, bool, error) {
+	e, ok := s.getEntry(key)
 	if !ok {
-		return nil, false
+		return "", false, nil
 	}
 
-	if e.expireAt != nil && time.Now().After(*e.expireAt) {
-		delete(kv.m, key)
-		return nil, false
+	if data, ok := e.val.(string); ok {
+		return data, true, nil
 	}
-
-	return e.val, true
+	return "", false, config.ErrWrongType
 }
 
-func (kv *KV) TTL(key string) int64 {
-	e, ok := kv.m[key]
+func (s *Datastore) TTL(key string) int64 {
+	e, ok := s.getEntry(key)
 	if !ok {
 		return -2
 	}
 
-	// No Expiry
 	if e.expireAt == nil {
 		return -1
 	}
-
-	// Expired
-	if time.Now().After(*e.expireAt) {
-		delete(kv.m, key)
-		return -2
-	}
-
-	sec := time.Until(*e.expireAt).Seconds()
-	if sec < 0 {
-		return -2
-	}
-	return int64(sec)
+	return int64(time.Until(*e.expireAt).Seconds())
 }
 
-func (kv *KV) PTTL(key string) int64 {
-	e, ok := kv.m[key]
+func (s *Datastore) PTTL(key string) int64 {
+	e, ok := s.getEntry(key)
 	if !ok {
 		return -2
 	}
 
-	// No Expiry
 	if e.expireAt == nil {
 		return -1
 	}
-
-	// Expired
-	if time.Now().After(*e.expireAt) {
-		delete(kv.m, key)
-		return -2
-	}
-
-	milisec := time.Until(*e.expireAt).Milliseconds()
-	if milisec < 0 {
-		return -2
-	}
-	return int64(milisec)
+	return time.Until(*e.expireAt).Milliseconds()
 }
 
-func (kv *KV) Expire(key string, seconds int64) bool {
-	v, ok := kv.m[key]
+func (s *Datastore) Expire(key string, seconds int64) bool {
+	e, ok := s.getEntry(key)
 	if !ok {
 		return false
 	}
 	expireAt := time.Now().Add(time.Duration(seconds) * time.Second)
-	v.expireAt = &expireAt
-	kv.m[key] = v
+	e.expireAt = &expireAt
+	s.m[key] = e
 	return true
 }
 
-func (kv *KV) PExpire(key string, ms int64) bool {
-	v, ok := kv.m[key]
+func (s *Datastore) PExpire(key string, ms int64) bool {
+	e, ok := s.getEntry(key)
 	if !ok {
 		return false
 	}
 	expireAt := time.Now().Add(time.Duration(ms) * time.Millisecond)
-	v.expireAt = &expireAt
-	kv.m[key] = v
-
+	e.expireAt = &expireAt
+	s.m[key] = e
 	return true
 }
 
-func (kv *KV) Persist(key string) bool {
-	v, ok := kv.m[key]
-	if !ok || v.expireAt == nil {
+func (s *Datastore) Persist(key string) bool {
+	e, ok := s.getEntry(key)
+	if !ok || e.expireAt == nil {
 		return false
 	}
-
-	v.expireAt = nil
-	kv.m[key] = v
-
+	e.expireAt = nil
+	s.m[key] = e
 	return true
 }
 
-func (kv *KV) Exists(listKey []string) int {
+func (s *Datastore) Exists(keys []string) int {
 	count := 0
-	for _, key := range listKey {
-		e, ok := kv.m[key]
-		if !ok || (e.expireAt != nil && time.Now().After(*e.expireAt)) {
-			continue
+	for _, key := range keys {
+		if _, ok := s.getEntry(key); ok {
+			count++
 		}
-		count++
 	}
-
 	return count
 }
 
-func (kv *KV) Del(listKey []string) int {
+func (s *Datastore) Del(keys []string) int {
 	count := 0
-	for _, key := range listKey {
-		e, ok := kv.m[key]
-		if !ok || (e.expireAt != nil && time.Now().After(*e.expireAt)) {
-			continue
+	for _, key := range keys {
+		if _, ok := s.getEntry(key); ok {
+			delete(s.m, key)
+			count++
 		}
-		count++
-		delete(kv.m, key)
 	}
-
 	return count
 }

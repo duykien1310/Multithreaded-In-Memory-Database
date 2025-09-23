@@ -1,7 +1,7 @@
 package command
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"backend/internal/protocol/resp"
 	"errors"
 	"fmt"
@@ -11,7 +11,7 @@ import (
 
 func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INITBYDIM' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 	key := args[0]
 	width, err := strconv.ParseUint(args[1], 10, 32)
@@ -23,16 +23,21 @@ func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 		return resp.Encode(fmt.Errorf("height must be a integer number %s", args[1]), false)
 	}
 
-	if !h.cms.CreateCMS(key, uint32(width), uint32(height)) {
-		return resp.Encode(errors.New("CMS: key already exists"), false)
+	ok, err := h.datastore.CreateCMS(key, uint32(width), uint32(height))
+	if err != nil {
+		return resp.Encode(err, false)
 	}
 
-	return constant.RespOk
+	if !ok {
+		return resp.Encode(config.ErrKeyAlreadyExists, false)
+	}
+
+	return config.RespOk
 }
 
 func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INITBYPROB' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 	key := args[0]
 	errRate, err := strconv.ParseFloat(args[1], 64)
@@ -50,16 +55,21 @@ func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 		return resp.Encode(errors.New("CMS: invalid prob value"), false)
 	}
 
-	if !h.cms.CreateCMSByProb(key, errRate, probability) {
-		return resp.Encode(errors.New("CMS: key already exists"), false)
+	ok, err := h.datastore.CreateCMSByProb(key, errRate, probability)
+	if err != nil {
+		return resp.Encode(err, false)
 	}
 
-	return constant.RespOk
+	if !ok {
+		return resp.Encode(config.ErrKeyAlreadyExists, false)
+	}
+
+	return config.RespOk
 }
 
 func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INCBY' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
@@ -70,7 +80,7 @@ func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 		if err != nil {
 			return resp.Encode(fmt.Errorf("increment must be a non negative integer number %s", args[1]), false)
 		}
-		count, err := h.cms.IncrBy(key, item, uint32(value))
+		count, err := h.datastore.IncrBy(key, item, uint32(value))
 		if err != nil {
 			return resp.Encode(err, false)
 		}
@@ -85,12 +95,12 @@ func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 
 func (h *Handler) cmdCMSQUERY(args []string) []byte {
 	if len(args) < 2 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.QUERY' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
 	items := args[1:]
-	res, err := h.cms.Query(key, items)
+	res, err := h.datastore.Query(key, items)
 	if err != nil {
 		return resp.Encode(err, false)
 	}
@@ -100,11 +110,11 @@ func (h *Handler) cmdCMSQUERY(args []string) []byte {
 
 func (h *Handler) cmdINFO(args []string) []byte {
 	if len(args) > 1 {
-		return resp.Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INFO' command"), false)
+		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
 	key := args[0]
-	w, d, err := h.cms.Info(key)
+	w, d, err := h.datastore.Info(key)
 	if err != nil {
 		return resp.Encode(err, false)
 	}

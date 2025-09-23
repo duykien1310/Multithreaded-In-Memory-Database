@@ -1,7 +1,7 @@
 package poller
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"backend/internal/payload"
 	"log"
 	"syscall"
@@ -22,8 +22,8 @@ func CreatePoller() (*KQueue, error) {
 
 	return &KQueue{
 		fd:            epollFD,
-		kqEvents:      make([]syscall.Kevent_t, constant.MaxConnection),
-		genericEvents: make([]payload.Event, constant.MaxConnection),
+		kqEvents:      make([]syscall.Kevent_t, config.MaxConnection),
+		genericEvents: make([]payload.Event, config.MaxConnection),
 	}, nil
 }
 
@@ -53,7 +53,7 @@ func (kq *KQueue) Close() error {
 
 func toNative(e payload.Event, flags uint16) syscall.Kevent_t {
 	var filter int16 = syscall.EVFILT_WRITE
-	if e.Op == constant.OpRead {
+	if e.Op == config.OpRead {
 		filter = syscall.EVFILT_READ
 	}
 	return syscall.Kevent_t{
@@ -64,9 +64,9 @@ func toNative(e payload.Event, flags uint16) syscall.Kevent_t {
 }
 
 func createEvent(kq syscall.Kevent_t) payload.Event {
-	var op uint32 = constant.OpWrite
+	var op uint32 = config.OpWrite
 	if kq.Filter == syscall.EVFILT_READ {
-		op = constant.OpRead
+		op = config.OpRead
 	}
 	return payload.Event{
 		Fd: int(kq.Ident),

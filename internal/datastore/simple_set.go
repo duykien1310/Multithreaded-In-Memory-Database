@@ -1,72 +1,94 @@
 package datastore
 
-type entrySimpleSet struct {
+import "backend/internal/config"
+
+type EntrySimpleSet struct {
 	mapVal map[string]struct{}
-	// expireAt *time.Time
 }
 
-type SimpleSet struct {
-	m map[string]entrySimpleSet
-}
-
-func NewSimpleSet() *SimpleSet {
-	return &SimpleSet{
-		m: make(map[string]entrySimpleSet),
+func (s *Datastore) getSimpleSet(key string) (*EntrySimpleSet, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return nil, nil
 	}
+	set, ok := e.val.(*EntrySimpleSet)
+	if !ok {
+		return nil, config.ErrWrongType
+	}
+	return set, nil
 }
 
-func (s *SimpleSet) SADD(key string, members []string) int {
+func (s *Datastore) SADD(key string, members []string) (int, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		set := &EntrySimpleSet{mapVal: make(map[string]struct{})}
+		s.m[key] = Entry{val: set}
+		e = s.m[key]
+	}
+
+	set, ok := e.val.(*EntrySimpleSet)
+	if !ok {
+		return 0, config.ErrWrongType
+	}
+
 	countAdded := 0
-	if _, ok := s.m[key]; !ok {
-		s.m[key] = entrySimpleSet{mapVal: make(map[string]struct{})}
-	}
 	for _, m := range members {
-		if _, ok := s.m[key].mapVal[m]; !ok {
-			s.m[key].mapVal[m] = struct{}{}
+		if _, exists := set.mapVal[m]; !exists {
+			set.mapVal[m] = struct{}{}
 			countAdded++
 		}
 	}
-
-	return countAdded
+	return countAdded, nil
 }
 
-func (s *SimpleSet) SMembers(key string) []string {
-	if _, ok := s.m[key]; !ok {
-		return []string{}
+func (s *Datastore) SMembers(key string) ([]string, error) {
+	set, err := s.getSimpleSet(key)
+	if err != nil {
+		return nil, err
+	}
+	if set == nil {
+		return []string{}, nil
 	}
 
-	m := []string{}
-	for k := range s.m[key].mapVal {
-		m = append(m, k)
+	members := make([]string, 0, len(set.mapVal))
+	for k := range set.mapVal {
+		members = append(members, k)
 	}
-	return m
+	return members, nil
 }
 
-func (s *SimpleSet) SIsMember(key string, member string) int {
-	if _, ok := s.m[key]; !ok {
-		return 0
+// SIsMember checks if a member exists in the set.
+func (s *Datastore) SIsMember(key, member string) (int, error) {
+	set, err := s.getSimpleSet(key)
+	if err != nil {
+		return 0, err
+	}
+	if set == nil {
+		return 0, nil
 	}
 
-	if _, ok := s.m[key].mapVal[member]; !ok {
-		return 0
+	if _, exists := set.mapVal[member]; exists {
+		return 1, nil
 	}
-
-	return 1
+	return 0, nil
 }
 
-func (s *SimpleSet) SMIsMember(key string, members []string) []int {
-	n := len(members)
+// SMIsMember checks multiple members at once.
+func (s *Datastore) SMIsMember(key string, members []string) ([]int, error) {
+	results := make([]int, len(members))
 
-	if _, ok := s.m[key]; !ok {
-		return make([]int, n)
+	set, err := s.getSimpleSet(key)
+	if err != nil {
+		return nil, err
+	}
+	if set == nil {
+		return results, nil
 	}
 
-	rs := make([]int, n)
 	for i, m := range members {
-		if _, ok := s.m[key].mapVal[m]; ok {
-			rs[i] = 1
+		if _, exists := set.mapVal[m]; exists {
+			results[i] = 1
 		}
 	}
-
-	return rs
+	return results, nil
 }

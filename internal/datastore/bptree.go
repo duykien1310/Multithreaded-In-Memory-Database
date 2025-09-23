@@ -8,11 +8,7 @@ import (
 // Keys are (score float64, member string) and order is by score, then member lexicographically.
 // Internal nodes store separator keys and child pointers; leaves store actual entries and are linked.
 
-const (
-	// order = max children per internal node. minChildren = ceil(order/2)
-	// For simplicity and correctness in small examples pick 16 in real world tune to page size.
-	bptOrder = 16
-)
+const bptOrder = 16
 
 type bptKey struct {
 	score  float64

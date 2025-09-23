@@ -1,8 +1,8 @@
 package resp
 
 import (
+	"backend/internal/config"
 	"backend/internal/payload"
-	"errors"
 	"strings"
 )
 
@@ -33,7 +33,7 @@ func Decode(data []byte) (interface{}, error) {
 
 func DecodeOne(data []byte) (interface{}, int, error) {
 	if len(data) == 0 {
-		return nil, 0, errors.New("no data")
+		return nil, 0, config.ErrNoData
 	}
 	switch data[0] {
 	case '+':

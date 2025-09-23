@@ -7,18 +7,12 @@ import (
 )
 
 type Handler struct {
-	kv        *datastore.KV
-	simpleSet *datastore.SimpleSet
-	zset      *datastore.ZSetBPTree
-	cms       *datastore.CMS
+	datastore *datastore.Datastore
 }
 
 func NewHandler() *Handler {
 	return &Handler{
-		kv:        datastore.NewKV(),
-		simpleSet: datastore.NewSimpleSet(),
-		zset:      datastore.NewZSetBPTree(),
-		cms:       datastore.NewCMS(),
+		datastore: datastore.NewDataStore(),
 	}
 }
 
