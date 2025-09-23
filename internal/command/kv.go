@@ -41,6 +41,8 @@ func (h *Handler) cmdSET(args []string) []byte {
 		} else if opt == "PX" {
 			ms, _ := strconv.ParseInt(args[3], 10, 64)
 			ttl = time.Duration(ms) * time.Millisecond
+		} else {
+			return resp.Encode(config.ErrSyntaxError, false)
 		}
 	}
 
