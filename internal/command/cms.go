@@ -23,7 +23,12 @@ func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 		return resp.Encode(fmt.Errorf("height must be a integer number %s", args[1]), false)
 	}
 
-	if !h.cms.CreateCMS(key, uint32(width), uint32(height)) {
+	ok, err := h.datastore.CreateCMS(key, uint32(width), uint32(height))
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
+	if !ok {
 		return resp.Encode(errors.New("CMS: key already exists"), false)
 	}
 
@@ -50,7 +55,12 @@ func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 		return resp.Encode(errors.New("CMS: invalid prob value"), false)
 	}
 
-	if !h.cms.CreateCMSByProb(key, errRate, probability) {
+	ok, err := h.datastore.CreateCMSByProb(key, errRate, probability)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
+	if !ok {
 		return resp.Encode(errors.New("CMS: key already exists"), false)
 	}
 
@@ -70,7 +80,7 @@ func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 		if err != nil {
 			return resp.Encode(fmt.Errorf("increment must be a non negative integer number %s", args[1]), false)
 		}
-		count, err := h.cms.IncrBy(key, item, uint32(value))
+		count, err := h.datastore.IncrBy(key, item, uint32(value))
 		if err != nil {
 			return resp.Encode(err, false)
 		}
@@ -90,7 +100,7 @@ func (h *Handler) cmdCMSQUERY(args []string) []byte {
 
 	key := args[0]
 	items := args[1:]
-	res, err := h.cms.Query(key, items)
+	res, err := h.datastore.Query(key, items)
 	if err != nil {
 		return resp.Encode(err, false)
 	}
@@ -104,7 +114,7 @@ func (h *Handler) cmdINFO(args []string) []byte {
 	}
 
 	key := args[0]
-	w, d, err := h.cms.Info(key)
+	w, d, err := h.datastore.Info(key)
 	if err != nil {
 		return resp.Encode(err, false)
 	}

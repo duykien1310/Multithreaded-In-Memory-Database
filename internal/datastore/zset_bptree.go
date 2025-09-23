@@ -1,169 +1,177 @@
 package datastore
 
 import (
+	"errors"
 	"fmt"
-	"sync"
+	"strconv"
 )
-
-// Assume bptree, bptKey, etc. are defined elsewhere in package datastore.
 
 type entryZSetBPTree struct {
 	dict map[string]float64 // member -> score
 	tree *bptree
 }
 
-type ZSetBPTree struct {
-	mu sync.RWMutex
-	m  map[string]*entryZSetBPTree
-}
-
-func NewZSetBPTree() *ZSetBPTree {
-	return &ZSetBPTree{
-		m: make(map[string]*entryZSetBPTree),
-	}
-}
-
-func (z *ZSetBPTree) ensureEntry(key string) *entryZSetBPTree {
-	ent := z.m[key]
-	if ent == nil {
-		ent = &entryZSetBPTree{
-			dict: make(map[string]float64),
-			tree: newBPTree(), // assumes newBPTree() exists
+func (s *Datastore) ensureZSet(key string) (*entryZSetBPTree, error) {
+	e, ok := s.m[key]
+	if ok && !s.isExpired(e) {
+		if zset, ok := e.val.(*entryZSetBPTree); ok {
+			return zset, nil
 		}
-		z.m[key] = ent
+		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
-	return ent
+
+	newZSet := &entryZSetBPTree{
+		dict: make(map[string]float64),
+		tree: newBPTree(),
+	}
+	s.m[key] = Entry{val: newZSet}
+	return newZSet, nil
 }
 
-// ZAdd: add or update member with score
-func (z *ZSetBPTree) ZADD(key string, score float64, member string) int {
-	z.mu.Lock()
-	defer z.mu.Unlock()
+// ZADD
+func (s *Datastore) ZADD(key string, value []string) (int, error) {
+	ent, err := s.ensureZSet(key)
+	if err != nil {
+		return 0, err
+	}
 
-	ent := z.ensureEntry(key)
-
-	// If member existed, remove old score from tree first.
-	if oldScore, ok := ent.dict[member]; ok {
-		if oldScore == score {
-			// nothing to do
-			return 0
+	count := 0
+	for i := 0; i < len(value); i += 2 {
+		member := value[i+1]
+		score, err := strconv.ParseFloat(value[i], 64)
+		if err != nil {
+			return count, errors.New("Score must be floating point number")
 		}
-		// remove old (score, member) from the tree
-		ent.tree.delete(bptKey{score: oldScore, member: member})
+
+		if oldScore, ok := ent.dict[member]; ok {
+			if oldScore == score {
+				continue
+			}
+			ent.tree.delete(bptKey{score: oldScore, member: member})
+		}
+
+		ent.dict[member] = score
+		ent.tree.insert(bptKey{score: score, member: member})
+		count++
 	}
 
-	// Insert/update
-	ent.dict[member] = score
-	return ent.tree.insert(bptKey{score: score, member: member})
+	return count, nil
 }
 
-// ZScore
-func (z *ZSetBPTree) ZScore(key string, member string) (float64, bool) {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return 0, false
-	}
-	score, ok := ent.dict[member]
-	return score, ok
-}
-
-// ZCard
-func (z *ZSetBPTree) ZCard(key string) int {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return 0
-	}
-	return len(ent.dict)
-}
-
-// ZRank (0-based)
-func (z *ZSetBPTree) ZRank(key string, member string) (int, bool) {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return -1, false
-	}
-	score, ok := ent.dict[member]
+// ZSCORE
+func (s *Datastore) ZScore(key, member string) (float64, bool, error) {
+	e, ok := s.getEntry(key)
 	if !ok {
-		return -1, false
+		return 0, false, nil
 	}
-	r := ent.tree.rankOf(bptKey{score: score, member: member})
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return 0, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+	score, found := zset.dict[member]
+	return score, found, nil
+}
+
+// ZCARD
+func (s *Datastore) ZCard(key string) (int, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return 0, nil
+	}
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+	return len(zset.dict), nil
+}
+
+// ZRANK
+func (s *Datastore) ZRank(key, member string) (int, bool, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return -1, false, nil
+	}
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return -1, false, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
+	score, exists := zset.dict[member]
+	if !exists {
+		return -1, false, nil
+	}
+	r := zset.tree.rankOf(bptKey{score: score, member: member})
 	if r < 0 {
-		return -1, false
+		return -1, false, nil
 	}
-	return r, true
+	return r, true, nil
 }
 
-// ZRange by rank (inclusive indices)
-func (z *ZSetBPTree) ZRange(key string, start, stop int) []string {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return nil
-	}
-
-	bptKeys := ent.tree.rangeByRank(start, stop)
-	rs := []string{}
-	for _, key := range bptKeys {
-		rs = append(rs, key.member)
-	}
-
-	return rs
-}
-
-func (z *ZSetBPTree) ZRangeWithScore(key string, start, stop int) []string {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return nil
-	}
-
-	bptKeys := ent.tree.rangeByRank(start, stop)
-	rs := []string{}
-	for _, key := range bptKeys {
-		rs = append(rs, key.member)
-		rs = append(rs, fmt.Sprintf("%.2f", key.score))
-	}
-
-	return rs
-}
-
-// ZRem removes a member and returns true if removed
-func (z *ZSetBPTree) ZRem(key string, member string) bool {
-	z.mu.Lock()
-	defer z.mu.Unlock()
-
-	ent := z.m[key]
-	if ent == nil {
-		return false
-	}
-
-	score, ok := ent.dict[member]
+// ZRANGE
+func (s *Datastore) ZRange(key string, start, stop int) ([]string, error) {
+	e, ok := s.getEntry(key)
 	if !ok {
-		return false
+		return nil, nil
+	}
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 
-	deleted := ent.tree.delete(bptKey{score: score, member: member})
-	if deleted {
-		delete(ent.dict, member)
+	bptKeys := zset.tree.rangeByRank(start, stop)
+	rs := make([]string, 0, len(bptKeys))
+	for _, k := range bptKeys {
+		rs = append(rs, k.member)
+	}
+	return rs, nil
+}
+
+// ZRANGE WITHSCORES
+func (s *Datastore) ZRangeWithScore(key string, start, stop int) ([]string, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return nil, nil
+	}
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 
-	// If entry is now empty, remove it from top-level map to avoid growing empty entries.
-	if len(ent.dict) == 0 {
-		delete(z.m, key)
+	bptKeys := zset.tree.rangeByRank(start, stop)
+	rs := make([]string, 0, len(bptKeys)*2)
+	for _, k := range bptKeys {
+		rs = append(rs, k.member)
+		rs = append(rs, fmt.Sprintf("%.2f", k.score))
+	}
+	return rs, nil
+}
+
+// ZREM
+func (s *Datastore) ZRem(key string, members []string) (int, error) {
+	e, ok := s.getEntry(key)
+	if !ok {
+		return 0, nil
+	}
+	zset, ok := e.val.(*entryZSetBPTree)
+	if !ok {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 
-	return deleted
+	countDeleted := 0
+	for _, member := range members {
+		score, exists := zset.dict[member]
+		if !exists {
+			continue
+		}
+		deleted := zset.tree.delete(bptKey{score: score, member: member})
+		if deleted {
+			delete(zset.dict, member)
+			countDeleted++
+		}
+		if len(zset.dict) == 0 {
+			delete(s.m, key)
+		}
+	}
+
+	return countDeleted, nil
 }

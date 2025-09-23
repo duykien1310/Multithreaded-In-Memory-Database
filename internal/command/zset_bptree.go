@@ -21,20 +21,12 @@ func (h *Handler) cmdZADD(args []string) []byte {
 		return resp.Encode(errors.New(fmt.Sprintf("(error) Wrong number of (score, member) arg: %d", numScoreEleArgs)), false)
 	}
 
-	count := 0
-	for i := scoreIndex; i < len(args); i += 2 {
-		member := args[i+1]
-		score, err := strconv.ParseFloat(args[i], 64)
-		if err != nil {
-			return resp.Encode(errors.New("Score must be floating point number"), false)
-		}
-		ret := h.zset.ZADD(key, score, member)
-		if ret != 1 {
-			return resp.Encode(errors.New("error when adding element"), false)
-		}
-		count++
+	rs, err := h.datastore.ZADD(key, args[1:])
+	if err != nil {
+		return resp.Encode(err, false)
 	}
-	return resp.Encode(count, false)
+
+	return resp.Encode(rs, false)
 }
 
 func (h *Handler) cmdZSCORE(args []string) []byte {
@@ -43,7 +35,11 @@ func (h *Handler) cmdZSCORE(args []string) []byte {
 	}
 
 	key, member := args[0], args[1]
-	score, exist := h.zset.ZScore(key, member)
+	score, exist, err := h.datastore.ZScore(key, member)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
 	if !exist {
 		return constant.RespNil
 	}
@@ -57,7 +53,11 @@ func (h *Handler) cmdZRANK(args []string) []byte {
 	}
 
 	key, member := args[0], args[1]
-	rank, exist := h.zset.ZRank(key, member)
+	rank, exist, err := h.datastore.ZRank(key, member)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
 	if !exist {
 		return constant.RespNil
 	}
@@ -71,7 +71,12 @@ func (h *Handler) cmdZCARD(args []string) []byte {
 	}
 
 	key := args[0]
-	return resp.Encode(h.zset.ZCard(key), false)
+	rs, err := h.datastore.ZCard(key)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
+	return resp.Encode(rs, false)
 }
 
 func (h *Handler) cmdZRANGE(args []string) []byte {
@@ -98,10 +103,20 @@ func (h *Handler) cmdZRANGE(args []string) []byte {
 	}
 
 	if withScores {
-		return resp.Encode(h.zset.ZRangeWithScore(key, start, stop), false)
+		rs, err := h.datastore.ZRangeWithScore(key, start, stop)
+		if err != nil {
+			return resp.Encode(err, false)
+		}
+
+		return resp.Encode(rs, false)
 	}
 
-	return resp.Encode(h.zset.ZRange(key, start, stop), false)
+	rs, err := h.datastore.ZRange(key, start, stop)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
+	return resp.Encode(rs, false)
 }
 
 func (h *Handler) cmdZREM(args []string) []byte {
@@ -111,13 +126,11 @@ func (h *Handler) cmdZREM(args []string) []byte {
 
 	key := args[0]
 	members := args[1:]
-	deleted := 0
 
-	for _, mem := range members {
-		if h.zset.ZRem(key, mem) {
-			deleted++
-		}
+	rs, err := h.datastore.ZRem(key, members)
+	if err != nil {
+		return resp.Encode(err, false)
 	}
 
-	return resp.Encode(deleted, false)
+	return resp.Encode(rs, false)
 }

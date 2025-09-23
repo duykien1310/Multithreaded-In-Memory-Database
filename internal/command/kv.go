@@ -29,7 +29,7 @@ func (h *Handler) cmdSET(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'set' command"), false)
 	}
 
-	key, val := args[0], []byte(args[1])
+	key, val := args[0], args[1]
 
 	// Options
 	ttl := time.Duration(0)
@@ -44,7 +44,7 @@ func (h *Handler) cmdSET(args []string) []byte {
 		}
 	}
 
-	h.kv.Set(key, val, ttl)
+	h.datastore.Set(key, val, ttl)
 
 	return resp.Encode("OK", true)
 }
@@ -54,11 +54,12 @@ func (h *Handler) cmdGET(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'get' command"), false)
 	}
 
-	if val, ok := h.kv.Get(args[0]); ok {
-		return resp.Encode(string(val), false)
+	val, err := h.datastore.Get(args[0])
+	if err != nil {
+		return resp.Encode(err, false)
 	}
 
-	return resp.Encode(nil, false)
+	return resp.Encode(val, false)
 }
 
 func (h *Handler) cmdTTL(args []string) []byte {
@@ -66,7 +67,7 @@ func (h *Handler) cmdTTL(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'ttl' command"), false)
 	}
 
-	seconds := h.kv.TTL(args[0])
+	seconds := h.datastore.TTL(args[0])
 
 	return resp.Encode(strconv.Itoa(int(seconds)), true)
 }
@@ -76,7 +77,7 @@ func (h *Handler) cmdPTTL(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'pttl' command"), false)
 	}
 
-	seconds := h.kv.PTTL(args[0])
+	seconds := h.datastore.PTTL(args[0])
 
 	return resp.Encode(strconv.Itoa(int(seconds)), true)
 }
@@ -93,7 +94,7 @@ func (h *Handler) cmdExpire(args []string) []byte {
 		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
 	}
 
-	if h.kv.Expire(args[0], sec) {
+	if h.datastore.Expire(args[0], sec) {
 		return resp.Encode(strconv.Itoa(1), true)
 	}
 
@@ -112,7 +113,7 @@ func (h *Handler) cmdPExpire(args []string) []byte {
 		return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
 	}
 
-	if h.kv.PExpire(args[0], miliSec) {
+	if h.datastore.PExpire(args[0], miliSec) {
 		return resp.Encode(strconv.Itoa(1), true)
 	}
 
@@ -124,7 +125,7 @@ func (h *Handler) cmdPersist(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'persist' command"), false)
 	}
 
-	if h.kv.Persist(args[0]) {
+	if h.datastore.Persist(args[0]) {
 		return resp.Encode(strconv.Itoa(1), true)
 	}
 
@@ -136,7 +137,7 @@ func (h *Handler) cmdExists(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'exists' command"), false)
 	}
 
-	count := h.kv.Exists(args)
+	count := h.datastore.Exists(args)
 
 	return resp.Encode(strconv.Itoa(count), true)
 }
@@ -146,7 +147,7 @@ func (h *Handler) cmdDel(args []string) []byte {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'del' command"), false)
 	}
 
-	count := h.kv.Del(args)
+	count := h.datastore.Del(args)
 
 	return resp.Encode(strconv.Itoa(count), true)
 }

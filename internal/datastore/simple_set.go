@@ -1,72 +1,89 @@
 package datastore
 
-type entrySimpleSet struct {
+import "errors"
+
+type EntrySimpleSet struct {
 	mapVal map[string]struct{}
-	// expireAt *time.Time
 }
 
-type SimpleSet struct {
-	m map[string]entrySimpleSet
-}
-
-func NewSimpleSet() *SimpleSet {
-	return &SimpleSet{
-		m: make(map[string]entrySimpleSet),
-	}
-}
-
-func (s *SimpleSet) SADD(key string, members []string) int {
-	countAdded := 0
+func (s *Datastore) SADD(key string, members []string) (int, error) {
 	if _, ok := s.m[key]; !ok {
-		s.m[key] = entrySimpleSet{mapVal: make(map[string]struct{})}
-	}
-	for _, m := range members {
-		if _, ok := s.m[key].mapVal[m]; !ok {
-			s.m[key].mapVal[m] = struct{}{}
-			countAdded++
+		s.m[key] = Entry{
+			val: &EntrySimpleSet{
+				mapVal: make(map[string]struct{}),
+			},
 		}
 	}
 
-	return countAdded
+	switch entryVal := s.m[key].val.(type) {
+	case *EntrySimpleSet:
+		countAdded := 0
+		for _, m := range members {
+			if _, exists := entryVal.mapVal[m]; !exists {
+				entryVal.mapVal[m] = struct{}{}
+				countAdded++
+			}
+		}
+		return countAdded, nil
+	default:
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
 }
 
-func (s *SimpleSet) SMembers(key string) []string {
-	if _, ok := s.m[key]; !ok {
-		return []string{}
+func (s *Datastore) SMembers(key string) ([]string, error) {
+	entry, ok := s.m[key]
+	if !ok {
+		return []string{}, nil
 	}
 
-	m := []string{}
-	for k := range s.m[key].mapVal {
-		m = append(m, k)
+	switch entryVal := entry.val.(type) {
+	case *EntrySimpleSet:
+		members := make([]string, 0, len(entryVal.mapVal))
+		for k := range entryVal.mapVal {
+			members = append(members, k)
+		}
+		return members, nil
+	default:
+		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
-	return m
 }
 
-func (s *SimpleSet) SIsMember(key string, member string) int {
-	if _, ok := s.m[key]; !ok {
-		return 0
+func (s *Datastore) SIsMember(key string, member string) (int, error) {
+	entry, ok := s.m[key]
+	if !ok {
+		return 0, nil
 	}
 
-	if _, ok := s.m[key].mapVal[member]; !ok {
-		return 0
+	setEntry, ok := entry.val.(*EntrySimpleSet)
+	if !ok {
+		return 0, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 
-	return 1
+	if _, exists := setEntry.mapVal[member]; exists {
+		return 1, nil
+	}
+	return 0, nil
 }
 
-func (s *SimpleSet) SMIsMember(key string, members []string) []int {
+func (s *Datastore) SMIsMember(key string, members []string) ([]int, error) {
 	n := len(members)
+	results := make([]int, n)
 
-	if _, ok := s.m[key]; !ok {
-		return make([]int, n)
+	entry, ok := s.m[key]
+	if !ok {
+		return results, nil
 	}
 
-	rs := make([]int, n)
+	setEntry, ok := entry.val.(*EntrySimpleSet)
+	if !ok {
+		return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
+
 	for i, m := range members {
-		if _, ok := s.m[key].mapVal[m]; ok {
-			rs[i] = 1
+		if _, exists := setEntry.mapVal[m]; exists {
+			results[i] = 1
 		}
 	}
 
-	return rs
+	return results, nil
 }

@@ -11,8 +11,12 @@ func (h *Handler) cmdSADD(args []string) []byte {
 	}
 
 	key, members := args[0], args[1:]
+	countAdded, err := h.datastore.SADD(key, members)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
 
-	return resp.Encode(h.simpleSet.SADD(key, members), false)
+	return resp.Encode(countAdded, false)
 }
 
 func (h *Handler) cmdSMembers(args []string) []byte {
@@ -21,8 +25,12 @@ func (h *Handler) cmdSMembers(args []string) []byte {
 	}
 
 	key := args[0]
+	rs, err := h.datastore.SMembers(key)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
 
-	return resp.Encode(h.simpleSet.SMembers(key), false)
+	return resp.Encode(rs, false)
 }
 
 func (h *Handler) cmdSIsMember(args []string) []byte {
@@ -31,8 +39,12 @@ func (h *Handler) cmdSIsMember(args []string) []byte {
 	}
 
 	key, member := args[0], args[1]
+	rs, err := h.datastore.SIsMember(key, member)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
 
-	return resp.Encode(h.simpleSet.SIsMember(key, member), false)
+	return resp.Encode(rs, false)
 }
 
 func (h *Handler) cmdSMIsMember(args []string) []byte {
@@ -41,6 +53,10 @@ func (h *Handler) cmdSMIsMember(args []string) []byte {
 	}
 
 	key, members := args[0], args[1:]
+	rs, err := h.datastore.SMIsMember(key, members)
+	if err != nil {
+		return resp.Encode(err, false)
+	}
 
-	return resp.Encode(h.simpleSet.SMIsMember(key, members), false)
+	return resp.Encode(rs, false)
 }
