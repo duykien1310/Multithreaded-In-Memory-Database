@@ -133,7 +133,7 @@ func (s *Server) Start() error {
 
 func (s *Server) acceptLoop() {
 	for {
-		conn, err := s.Listener.Accept()
+		conn, err := s.Listener.Accept() // Blocking
 		if err != nil {
 			select {
 			case <-s.ctx.Done():
@@ -165,7 +165,7 @@ func handleConnection(conn net.Conn, workerID int) {
 
 	for {
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // prevent idle hang
-		data, err := reader.ReadString('\n')
+		data, err := reader.ReadString('\n')                   // Blocking
 		if err != nil {
 			log.Printf("[Worker %d] Client %s disconnected", workerID, conn.RemoteAddr())
 			return
