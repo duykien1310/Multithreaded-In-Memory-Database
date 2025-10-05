@@ -10,9 +10,9 @@ type Handler struct {
 	datastore *datastore.Datastore
 }
 
-func NewHandler() *Handler {
+func NewHandler(d *datastore.Datastore) *Handler {
 	return &Handler{
-		datastore: datastore.NewDataStore(),
+		datastore: d,
 	}
 }
 

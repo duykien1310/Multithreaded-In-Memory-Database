@@ -1,7 +1,7 @@
 package poller
 
 import (
-	"backend/internal/constant"
+	"backend/internal/config"
 	"backend/internal/payload"
 	"log"
 	"syscall"
@@ -22,8 +22,8 @@ func CreatePoller() (*Epoll, error) {
 
 	return &Epoll{
 		fd:            epollFD,
-		epollEvents:   make([]syscall.EpollEvent, constant.MaxConnection),
-		genericEvents: make([]payload.Event, constant.MaxConnection),
+		epollEvents:   make([]syscall.EpollEvent, config.MaxConnection),
+		genericEvents: make([]payload.Event, config.MaxConnection),
 	}, nil
 }
 
@@ -51,7 +51,7 @@ func (ep *Epoll) Close() error {
 
 func toNative(e payload.Event) syscall.EpollEvent {
 	var event uint32 = syscall.EPOLLIN
-	if e.Op == constant.OpWrite {
+	if e.Op == config.OpWrite {
 		event = syscall.EPOLLOUT
 	}
 	return syscall.EpollEvent{
@@ -61,9 +61,9 @@ func toNative(e payload.Event) syscall.EpollEvent {
 }
 
 func createEvent(ep syscall.EpollEvent) payload.Event {
-	var op uint32 = constant.OpRead
+	var op uint32 = config.OpRead
 	if ep.Events == syscall.EPOLLOUT {
-		op = constant.OpWrite
+		op = config.OpWrite
 	}
 	return payload.Event{
 		Fd: int(ep.Fd),
