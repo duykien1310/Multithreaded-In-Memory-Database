@@ -3,6 +3,7 @@ package main
 import (
 	"backend/internal/command"
 	"backend/internal/config"
+	"backend/internal/datastore"
 	"backend/internal/server"
 	"log"
 )
@@ -18,7 +19,8 @@ func main() {
 		Protocol: config.GetString("protocol"),
 	}
 
-	h := command.NewHandler()
+	db := datastore.NewDataStore()
+	h := command.NewHandler(db)
 
 	s := server.NewServer(config.Host, config.Port, config.Protocol, h)
 	if err := s.Start(); err != nil {
