@@ -1,4 +1,4 @@
-package command
+package worker
 
 import (
 	"backend/internal/config"
@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
+func (h *Worker) cmdCMSINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -35,7 +35,7 @@ func (h *Handler) cmdCMSINITBYDIM(args []string) []byte {
 	return config.RespOk
 }
 
-func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
+func (h *Worker) cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -67,7 +67,7 @@ func (h *Handler) cmdCMSINITBYPROB(args []string) []byte {
 	return config.RespOk
 }
 
-func (h *Handler) cmdCMSINCRBY(args []string) []byte {
+func (h *Worker) cmdCMSINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -93,7 +93,7 @@ func (h *Handler) cmdCMSINCRBY(args []string) []byte {
 	return resp.Encode(res, false)
 }
 
-func (h *Handler) cmdCMSQUERY(args []string) []byte {
+func (h *Worker) cmdCMSQUERY(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -108,7 +108,7 @@ func (h *Handler) cmdCMSQUERY(args []string) []byte {
 	return resp.Encode(res, false)
 }
 
-func (h *Handler) cmdINFO(args []string) []byte {
+func (h *Worker) cmdINFO(args []string) []byte {
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}

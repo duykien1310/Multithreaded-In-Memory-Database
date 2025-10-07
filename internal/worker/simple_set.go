@@ -1,11 +1,11 @@
-package command
+package worker
 
 import (
 	"backend/internal/config"
 	"backend/internal/protocol/resp"
 )
 
-func (h *Handler) cmdSADD(args []string) []byte {
+func (h *Worker) cmdSADD(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -19,7 +19,7 @@ func (h *Handler) cmdSADD(args []string) []byte {
 	return resp.Encode(countAdded, false)
 }
 
-func (h *Handler) cmdSMembers(args []string) []byte {
+func (h *Worker) cmdSMembers(args []string) []byte {
 	if len(args) != 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -33,7 +33,7 @@ func (h *Handler) cmdSMembers(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdSIsMember(args []string) []byte {
+func (h *Worker) cmdSIsMember(args []string) []byte {
 	if len(args) != 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -47,7 +47,7 @@ func (h *Handler) cmdSIsMember(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdSMIsMember(args []string) []byte {
+func (h *Worker) cmdSMIsMember(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}

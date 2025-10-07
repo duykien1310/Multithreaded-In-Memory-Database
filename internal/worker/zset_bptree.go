@@ -1,4 +1,4 @@
-package command
+package worker
 
 import (
 	"backend/internal/config"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (h *Handler) cmdZADD(args []string) []byte {
+func (h *Worker) cmdZADD(args []string) []byte {
 	if len(args) < 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -28,7 +28,7 @@ func (h *Handler) cmdZADD(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdZSCORE(args []string) []byte {
+func (h *Worker) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -46,7 +46,7 @@ func (h *Handler) cmdZSCORE(args []string) []byte {
 	return resp.Encode(fmt.Sprintf("%f", score), false)
 }
 
-func (h *Handler) cmdZRANK(args []string) []byte {
+func (h *Worker) cmdZRANK(args []string) []byte {
 	if len(args) != 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -64,7 +64,7 @@ func (h *Handler) cmdZRANK(args []string) []byte {
 	return resp.Encode(rank, false)
 }
 
-func (h *Handler) cmdZCARD(args []string) []byte {
+func (h *Worker) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -78,7 +78,7 @@ func (h *Handler) cmdZCARD(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdZRANGE(args []string) []byte {
+func (h *Worker) cmdZRANGE(args []string) []byte {
 	withScores := false
 	if len(args) < 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
@@ -118,7 +118,7 @@ func (h *Handler) cmdZRANGE(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdZREM(args []string) []byte {
+func (h *Worker) cmdZREM(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}

@@ -1,4 +1,4 @@
-package command
+package worker
 
 import (
 	"backend/internal/config"
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (h *Handler) cmdPING(args []string) []byte {
+func (h *Worker) cmdPING(args []string) []byte {
 	var res []byte
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
@@ -22,7 +22,7 @@ func (h *Handler) cmdPING(args []string) []byte {
 	return res
 }
 
-func (h *Handler) cmdSET(args []string) []byte {
+func (h *Worker) cmdSET(args []string) []byte {
 	if len(args) == 3 || len(args) > 4 {
 		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
@@ -51,7 +51,7 @@ func (h *Handler) cmdSET(args []string) []byte {
 	return resp.Encode("OK", true)
 }
 
-func (h *Handler) cmdGET(args []string) []byte {
+func (h *Worker) cmdGET(args []string) []byte {
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -68,7 +68,7 @@ func (h *Handler) cmdGET(args []string) []byte {
 	return resp.Encode(val, false)
 }
 
-func (h *Handler) cmdTTL(args []string) []byte {
+func (h *Worker) cmdTTL(args []string) []byte {
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -78,7 +78,7 @@ func (h *Handler) cmdTTL(args []string) []byte {
 	return resp.Encode(strconv.Itoa(int(seconds)), true)
 }
 
-func (h *Handler) cmdPTTL(args []string) []byte {
+func (h *Worker) cmdPTTL(args []string) []byte {
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -88,7 +88,7 @@ func (h *Handler) cmdPTTL(args []string) []byte {
 	return resp.Encode(strconv.Itoa(int(seconds)), true)
 }
 
-func (h *Handler) cmdExpire(args []string) []byte {
+func (h *Worker) cmdExpire(args []string) []byte {
 	if len(args) > 2 {
 		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
@@ -107,7 +107,7 @@ func (h *Handler) cmdExpire(args []string) []byte {
 	return resp.Encode(strconv.Itoa(0), true)
 }
 
-func (h *Handler) cmdPExpire(args []string) []byte {
+func (h *Worker) cmdPExpire(args []string) []byte {
 	if len(args) > 2 {
 		return resp.Encode(config.ErrSyntaxError, false)
 	} else if len(args) < 2 {
@@ -126,7 +126,7 @@ func (h *Handler) cmdPExpire(args []string) []byte {
 	return resp.Encode(strconv.Itoa(0), true)
 }
 
-func (h *Handler) cmdPersist(args []string) []byte {
+func (h *Worker) cmdPersist(args []string) []byte {
 	if len(args) > 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -138,7 +138,7 @@ func (h *Handler) cmdPersist(args []string) []byte {
 	return resp.Encode(strconv.Itoa(0), true)
 }
 
-func (h *Handler) cmdExists(args []string) []byte {
+func (h *Worker) cmdExists(args []string) []byte {
 	if len(args) < 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -148,7 +148,7 @@ func (h *Handler) cmdExists(args []string) []byte {
 	return resp.Encode(strconv.Itoa(count), true)
 }
 
-func (h *Handler) cmdDel(args []string) []byte {
+func (h *Worker) cmdDel(args []string) []byte {
 	if len(args) < 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
