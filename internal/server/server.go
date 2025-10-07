@@ -9,10 +9,6 @@ import (
 	"syscall"
 )
 
-// type Handler interface {
-// 	HandleCmd(cmd *payload.Command, connFd int) error
-// }
-
 type Server struct {
 	host          string
 	port          int
@@ -111,7 +107,6 @@ func (s *Server) Start() error {
 			continue
 		}
 
-		// Now safe to close the Go-level net.Conn wrapper (we manage dupFd manually)
 		conn.Close()
 	}
 }
