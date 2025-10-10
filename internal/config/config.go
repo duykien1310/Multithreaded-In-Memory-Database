@@ -7,6 +7,15 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	MaxConnection = 20000
+	OpRead        = 0
+	OpWrite       = 1
+	CRLF          = "\r\n"
+	WithScore     = "WITHSCORES"
+	BufferSize    = 1024
+)
+
 func SetConfigFile(path string) {
 	viper.SetConfigName("config")
 	viper.AddConfigPath(path)

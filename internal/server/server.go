@@ -1,34 +1,34 @@
 package server
 
 import (
-	"backend/internal/config"
 	"backend/internal/io_multiplxeing/poller"
-	"backend/internal/payload"
-	"backend/internal/protocol/resp"
+	"backend/internal/worker"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"syscall"
 )
 
-type Handler interface {
-	HandleCmd(cmd *payload.Command, connFd int) error
-}
-
 type Server struct {
-	host     string
-	port     int
-	protocol string
-	h        Handler
+	host          string
+	port          int
+	protocol      string
+	numWorker     int
+	numIoHandler  int
+	workers       []*worker.Worker
+	ioHandlers    []*poller.IOHandler
+	nextIOHandler int
 }
 
-func NewServer(host string, port int, protocol string, h Handler) *Server {
+func NewServer(host string, port int, protocol string, workers []*worker.Worker, ioHandlers []*poller.IOHandler, numWorker int, numIoHandler int) *Server {
 	return &Server{
-		host:     host,
-		port:     port,
-		protocol: protocol,
-		h:        h,
+		host:         host,
+		port:         port,
+		protocol:     protocol,
+		workers:      workers,
+		ioHandlers:   ioHandlers,
+		numWorker:    numWorker,
+		numIoHandler: numIoHandler,
 	}
 }
 
@@ -40,89 +40,73 @@ func (s *Server) Start() error {
 	}
 	defer listener.Close()
 
-	// Get the file descriptor from the listener
-	tcpListener, ok := listener.(*net.TCPListener)
-	if !ok {
-		log.Fatal("listener is not a TCPListener")
-	}
-	listenerFile, err := tcpListener.File()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer listenerFile.Close()
-
-	lnFd := int(listenerFile.Fd())
-
-	// Create a poller instance (epoll in Linux, kqueue in MacOS)
-	poller, err := poller.CreatePoller()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer poller.Close()
-
-	// Monitor "read" events on the Server FD
-	if err = poller.Monitor(payload.Event{
-		Fd: lnFd,
-		Op: config.OpRead,
-	}); err != nil {
-		log.Fatal(err)
+	for _, worker := range s.workers {
+		go worker.Start()
 	}
 
-	var events = make([]payload.Event, config.MaxConnection)
+	for _, ioHandler := range s.ioHandlers {
+		go ioHandler.Start()
+	}
+
 	for {
-		// wait for file descriptors in the monitoring list to be ready for I/O
-		// it is a blocking call.
-		events, err = poller.Wait()
+		conn, err := listener.Accept()
 		if err != nil {
+			log.Printf("Failed to accept connection: %v", err)
 			continue
 		}
 
-		for i := 0; i < len(events); i++ {
-			if events[i].Fd == lnFd {
-				log.Printf("new client is trying to connect")
-				// set up new connection
-				connFd, _, err := syscall.Accept(lnFd)
-				if err != nil {
-					log.Println("err", err)
-					continue
-				}
-				log.Printf("set up a new connection")
-				// ask epoll to monitor this connection
-				if err = poller.Monitor(payload.Event{
-					Fd: connFd,
-					Op: config.OpRead,
-				}); err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				cmd, err := readCommand(events[i].Fd)
-				if err != nil {
-					if err == io.EOF || err == syscall.ECONNRESET {
-						log.Println("client disconnected")
-						syscall.Close(events[i].Fd)
-						continue
-					}
-					log.Println("read error:", err)
-					continue
-				}
-
-				// Handle command (Continue)
-				if err = s.h.HandleCmd(cmd, events[i].Fd); err != nil {
-					log.Println("handle err:", err)
-				}
-			}
+		tcpConn, ok := conn.(*net.TCPConn)
+		if !ok {
+			log.Printf("Unsupported connection type")
+			conn.Close()
+			continue
 		}
-	}
-}
 
-func readCommand(fd int) (*payload.Command, error) {
-	var buf = make([]byte, 512)
-	n, err := syscall.Read(fd, buf)
-	if err != nil {
-		return nil, err
+		rawConn, err := tcpConn.SyscallConn()
+		if err != nil {
+			log.Printf("Failed to get syscall.RawConn: %v", err)
+			conn.Close()
+			continue
+		}
+
+		var dupFd int
+		var controlErr error
+		controlErr = rawConn.Control(func(fd uintptr) {
+			// Duplicate FD so that Go runtime does not own the FD we will manage
+			nfd, err := syscall.Dup(int(fd))
+			if err != nil {
+				controlErr = err
+				return
+			}
+			dupFd = nfd
+		})
+		if controlErr != nil {
+			log.Printf("Failed to dup fd: %v", controlErr)
+			conn.Close()
+			continue
+		}
+
+		// Make the duplicated fd non-blocking (epoll style)
+		if err := syscall.SetNonblock(dupFd, true); err != nil {
+			log.Printf("Failed to set non-blocking on fd %d: %v", dupFd, err)
+			syscall.Close(dupFd)
+			conn.Close()
+			continue
+		}
+
+		// Round-robin
+		handlerIndex := s.nextIOHandler % s.numIoHandler
+		ioHandler := s.ioHandlers[handlerIndex]
+		s.nextIOHandler++
+
+		// add duplicated fd into epoll of I/O handler
+		if err := ioHandler.AddConn(dupFd); err != nil {
+			log.Printf("Failed to add fd %d to I/O handler %d: %v", dupFd, ioHandler.Id, err)
+			syscall.Close(dupFd)
+			conn.Close()
+			continue
+		}
+
+		conn.Close()
 	}
-	if n == 0 {
-		return nil, io.EOF
-	}
-	return resp.ParseCmd(buf)
 }
