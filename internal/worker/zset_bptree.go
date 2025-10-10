@@ -1,4 +1,4 @@
-package command
+package worker
 
 import (
 	"backend/internal/config"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (h *Handler) cmdZADD(args []string) []byte {
+func (h *Worker) cmdZADD(args []string) []byte {
 	if len(args) < 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -28,7 +28,7 @@ func (h *Handler) cmdZADD(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdZSCORE(args []string) []byte {
+func (h *Worker) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -46,7 +46,7 @@ func (h *Handler) cmdZSCORE(args []string) []byte {
 	return resp.Encode(fmt.Sprintf("%f", score), false)
 }
 
-func (h *Handler) cmdZRANK(args []string) []byte {
+func (h *Worker) cmdZRANK(args []string) []byte {
 	if len(args) != 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -64,7 +64,7 @@ func (h *Handler) cmdZRANK(args []string) []byte {
 	return resp.Encode(rank, false)
 }
 
-func (h *Handler) cmdZCARD(args []string) []byte {
+func (h *Worker) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
@@ -78,15 +78,17 @@ func (h *Handler) cmdZCARD(args []string) []byte {
 	return resp.Encode(rs, false)
 }
 
-func (h *Handler) cmdZRANGE(args []string) []byte {
-	withScores := false
+func (h *Worker) cmdZRANGE(args []string) []byte {
 	if len(args) < 3 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
-	} else if len(args) == 4 {
-		if strings.ToUpper(args[3]) != "WITHSCORES" {
-			return resp.Encode(config.ErrSyntaxError, false)
-		} else {
+	}
+
+	withScores := false
+	if len(args) >= 4 {
+		if strings.EqualFold(args[3], "WITHSCORES") {
 			withScores = true
+		} else {
+			return resp.Encode(config.ErrSyntaxError, false)
 		}
 	}
 
@@ -95,30 +97,25 @@ func (h *Handler) cmdZRANGE(args []string) []byte {
 	if err != nil {
 		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
-
 	stop, err := strconv.Atoi(args[2])
 	if err != nil {
 		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
 	}
 
+	var res []string
 	if withScores {
-		rs, err := h.datastore.ZRangeWithScore(key, start, stop)
-		if err != nil {
-			return resp.Encode(err, false)
-		}
-
-		return resp.Encode(rs, false)
+		res, err = h.datastore.ZRangeWithScore(key, start, stop)
+	} else {
+		res, err = h.datastore.ZRange(key, start, stop)
 	}
-
-	rs, err := h.datastore.ZRange(key, start, stop)
 	if err != nil {
 		return resp.Encode(err, false)
 	}
 
-	return resp.Encode(rs, false)
+	return resp.Encode(res, false)
 }
 
-func (h *Handler) cmdZREM(args []string) []byte {
+func (h *Worker) cmdZREM(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}

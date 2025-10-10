@@ -8,7 +8,7 @@ import (
 // Keys are (score float64, member string) and order is by score, then member lexicographically.
 // Internal nodes store separator keys and child pointers; leaves store actual entries and are linked.
 
-const bptOrder = 16
+const bptOrder = 64
 
 type bptKey struct {
 	score  float64
@@ -176,50 +176,65 @@ func (t *bptree) splitLeaf(l *bptLeaf) {
 		t.root = newRoot
 		return
 	}
+
 	p := l.parent
-	// find insertion index
 	insertIdx := 0
 	for insertIdx < len(p.child) && p.child[insertIdx] != l {
 		insertIdx++
 	}
+
+	if insertIdx > len(p.sep) {
+		insertIdx = len(p.sep)
+	}
+
 	// insert child
 	p.child = append(p.child, nil)
 	copy(p.child[insertIdx+1:], p.child[insertIdx:])
 	p.child[insertIdx+1] = newLeaf
+
 	p.sep = append(p.sep, bptKey{})
 	copy(p.sep[insertIdx+1:], p.sep[insertIdx:])
 	p.sep[insertIdx] = newLeaf.keys[0]
-	// update counts: replace l's count with l.len and insert newLeaf.len
+
 	p.counts = append(p.counts, 0)
 	copy(p.counts[insertIdx+1:], p.counts[insertIdx:])
 	p.counts[insertIdx] = len(l.keys)
 	p.counts[insertIdx+1] = len(newLeaf.keys)
-	newLeaf.parent = p
 
-	// adjust parent upwards
+	newLeaf.parent = p
 	t.fixUpAfterInsert(p)
 }
 
 func (t *bptree) fixUpAfterInsert(p *bptInternal) {
-	// if overflow children > bptOrder-? (we set max children = bptOrder)
 	if len(p.child) > bptOrder {
-		// split internal
+		// Split internal node.
 		mid := len(p.child) / 2
-		// create right internal
-		right := &bptInternal{
-			sep:    append([]bptKey(nil), p.sep[mid:]...),
-			child:  append([]bptNode(nil), p.child[mid:]...),
-			counts: append([]int(nil), p.counts[mid:]...),
-		}
-		// truncate left
-		oldSep := p.sep
-		oldChild := p.child
-		oldCounts := p.counts
-		p.sep = append([]bptKey(nil), oldSep[:mid]...)
-		p.child = append([]bptNode(nil), oldChild[:mid]...)
-		p.counts = append([]int(nil), oldCounts[:mid]...)
 
-		// set parents for right children
+		// The key to promote is sep[mid-1]
+		promoted := p.sep[mid-1]
+
+		// Left internal keeps children [0:mid)
+		// Right internal keeps children [mid:]
+		leftChild := append([]bptNode(nil), p.child[:mid]...)
+		rightChild := append([]bptNode(nil), p.child[mid:]...)
+
+		leftSep := append([]bptKey(nil), p.sep[:mid-1]...) // before promoted
+		rightSep := append([]bptKey(nil), p.sep[mid:]...)  // after promoted
+
+		leftCounts := append([]int(nil), p.counts[:mid]...)
+		rightCounts := append([]int(nil), p.counts[mid:]...)
+
+		// Modify left node (p) in place
+		p.child = leftChild
+		p.sep = leftSep
+		p.counts = leftCounts
+
+		right := &bptInternal{
+			sep:    rightSep,
+			child:  rightChild,
+			counts: rightCounts,
+			parent: p.parent,
+		}
 		for _, c := range right.child {
 			if c.isLeaf() {
 				c.(*bptLeaf).parent = right
@@ -227,12 +242,6 @@ func (t *bptree) fixUpAfterInsert(p *bptInternal) {
 				c.(*bptInternal).parent = right
 			}
 		}
-		right.parent = p.parent
-
-		// promote separator: the first key of right.sep becomes promoted to parent
-		promoted := right.sep[0]
-		// remove promoted from right.sep (parent separator logic)
-		right.sep = right.sep[1:]
 
 		if p.parent == nil {
 			// new root
@@ -246,7 +255,8 @@ func (t *bptree) fixUpAfterInsert(p *bptInternal) {
 			t.root = newRoot
 			return
 		}
-		// insert right into parent
+
+		// insert into parent
 		par := p.parent
 		idx := 0
 		for idx < len(par.child) && par.child[idx] != p {
@@ -255,22 +265,22 @@ func (t *bptree) fixUpAfterInsert(p *bptInternal) {
 		par.child = append(par.child, nil)
 		copy(par.child[idx+1:], par.child[idx:])
 		par.child[idx+1] = right
+
 		par.sep = append(par.sep, bptKey{})
 		copy(par.sep[idx+1:], par.sep[idx:])
 		par.sep[idx] = promoted
+
 		par.counts = append(par.counts, 0)
 		copy(par.counts[idx+1:], par.counts[idx:])
 		par.counts[idx] = sumCounts(p)
 		par.counts[idx+1] = sumCounts(right)
-		right.parent = par
 
-		// continue upward
+		right.parent = par
 		t.fixUpAfterInsert(par)
 	} else {
-		// just repair counts up
+		// recompute counts upwards
 		cur := p
 		for cur != nil {
-			// recompute counts as sum of child lens
 			for i := range cur.counts {
 				cur.counts[i] = nodeCount(cur.child[i])
 			}
@@ -344,16 +354,17 @@ func (t *bptree) rankOf(key bptKey) int {
 
 // range by rank: returns slice of entries from start to stop inclusive (supports negative indices)
 func (t *bptree) rangeByRank(start, stop int) []bptKey {
-	if t.size == 0 {
+	if t == nil || t.size == 0 || t.root == nil {
 		return nil
 	}
-	// normalize negatives
+
 	n := t.size
+	// normalize negatives
 	if start < 0 {
-		start = n + start
+		start += n
 	}
 	if stop < 0 {
-		stop = n + stop
+		stop += n
 	}
 	if start < 0 {
 		start = 0
@@ -365,15 +376,13 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 		return nil
 	}
 
-	// find leaf & offset for start
+	need := stop - start + 1
 	idx := start
-	// descend from root using counts
 	node := t.root
 
-	// var path []int
+	// descend to leaf containing start
 	for !node.isLeaf() {
 		in := node.(*bptInternal)
-		// find child index where cumulative counts exceed idx
 		cum := 0
 		childIdx := 0
 		for i := 0; i < len(in.child); i++ {
@@ -383,23 +392,20 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 			}
 			cum += in.counts[i]
 		}
-
-		// path = append(path, childIdx)
-		idx = idx - cum
+		idx -= cum
 		node = in.child[childIdx]
 	}
-	l := node.(*bptLeaf)
-	// now idx is offset inside l.keys
-	result := make([]bptKey, 0, stop-start+1)
-	i := idx
-	curr := l
-	for curr != nil && len(result) <= (stop-start) {
-		for ; i < len(curr.keys) && len(result) <= (stop-start); i++ {
-			k := curr.keys[i]
-			result = append(result, bptKey{member: k.member, score: k.score})
+
+	leaf := node.(*bptLeaf)
+	result := make([]bptKey, 0, need)
+
+	// iterate forward across leaves collecting members
+	for curr := leaf; curr != nil && len(result) < need; curr = curr.next {
+		for ; idx < len(curr.keys) && len(result) < need; idx++ {
+			k := curr.keys[idx]
+			result = append(result, k)
 		}
-		curr = curr.next
-		i = 0
+		idx = 0
 	}
 	return result
 }

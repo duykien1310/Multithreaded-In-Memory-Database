@@ -3,6 +3,7 @@ package poller
 import (
 	"backend/internal/config"
 	"backend/internal/payload"
+	"errors"
 	"log"
 	"syscall"
 )
@@ -14,40 +15,79 @@ type KQueue struct {
 }
 
 func CreatePoller() (*KQueue, error) {
-	epollFD, err := syscall.Kqueue()
+	kqFD, err := syscall.Kqueue()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("CreatePoller: kqueue failed: %v", err)
 		return nil, err
 	}
 
 	return &KQueue{
-		fd:            epollFD,
+		fd:            kqFD,
 		kqEvents:      make([]syscall.Kevent_t, config.MaxConnection),
 		genericEvents: make([]payload.Event, config.MaxConnection),
 	}, nil
 }
 
 func (kq *KQueue) Monitor(event payload.Event) error {
-	kqEvent := toNative(event, syscall.EV_ADD)
-	// Add event.Fd to the monitoring list of kq.fd
-	_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{kqEvent}, nil, nil)
+	flags := syscall.EV_ADD | syscall.EV_ENABLE
+	kev := toNative(event, uint16(flags))
 
-	return err
+	_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{kev}, nil, nil)
+	if err != nil {
+		log.Printf("KQueue.Monitor: failed to add fd=%d op=%d: %v", event.Fd, event.Op, err)
+		return err
+	}
+	return nil
+}
+
+func (kq *KQueue) Remove(fd int) error {
+	deleteRead := toNative(payload.Event{Fd: fd, Op: config.OpRead}, syscall.EV_DELETE)
+	deleteWrite := toNative(payload.Event{Fd: fd, Op: config.OpWrite}, syscall.EV_DELETE)
+
+	var firstErr error
+
+	if _, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{deleteRead}, nil, nil); err != nil {
+		if !errors.Is(err, syscall.ENOENT) {
+			firstErr = err
+			log.Printf("KQueue.Remove: failed to delete read filter fd=%d: %v", fd, err)
+		}
+	}
+
+	if _, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{deleteWrite}, nil, nil); err != nil {
+		if !errors.Is(err, syscall.ENOENT) {
+			if firstErr == nil {
+				firstErr = err
+			}
+			log.Printf("KQueue.Remove: failed to delete write filter fd=%d: %v", fd, err)
+		}
+	}
+
+	return firstErr
 }
 
 func (kq *KQueue) Wait() ([]payload.Event, error) {
-	n, err := syscall.Kevent(kq.fd, nil, kq.kqEvents, nil) // It will sleep
-	if err != nil {
-		return nil, err
-	}
-	for i := 0; i < n; i++ {
-		kq.genericEvents[i] = createEvent(kq.kqEvents[i])
-	}
+	for {
+		n, err := syscall.Kevent(kq.fd, nil, kq.kqEvents, nil)
+		if err != nil {
+			// If interrupted by signal, retry.
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			return nil, err
+		}
 
-	return kq.genericEvents[:n], nil
+		// Convert native kevent_t entries to generic events.
+		for i := 0; i < n; i++ {
+			kq.genericEvents[i] = createEvent(kq.kqEvents[i])
+		}
+		return kq.genericEvents[:n], nil
+	}
 }
 
 func (kq *KQueue) Close() error {
+	if kq == nil {
+		return nil
+	}
 	return syscall.Close(kq.fd)
 }
 
