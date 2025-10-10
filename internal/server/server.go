@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"syscall"
 )
 
 type Server struct {
@@ -51,62 +50,17 @@ func (s *Server) Start() error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Failed to accept connection: %v", err)
+			log.Printf("Failed to acccept connection: %v", err)
 			continue
 		}
 
-		tcpConn, ok := conn.(*net.TCPConn)
-		if !ok {
-			log.Printf("Unsupported connection type")
-			conn.Close()
-			continue
-		}
-
-		rawConn, err := tcpConn.SyscallConn()
-		if err != nil {
-			log.Printf("Failed to get syscall.RawConn: %v", err)
-			conn.Close()
-			continue
-		}
-
-		var dupFd int
-		var controlErr error
-		controlErr = rawConn.Control(func(fd uintptr) {
-			// Duplicate FD so that Go runtime does not own the FD we will manage
-			nfd, err := syscall.Dup(int(fd))
-			if err != nil {
-				controlErr = err
-				return
-			}
-			dupFd = nfd
-		})
-		if controlErr != nil {
-			log.Printf("Failed to dup fd: %v", controlErr)
-			conn.Close()
-			continue
-		}
-
-		// Make the duplicated fd non-blocking (epoll style)
-		if err := syscall.SetNonblock(dupFd, true); err != nil {
-			log.Printf("Failed to set non-blocking on fd %d: %v", dupFd, err)
-			syscall.Close(dupFd)
-			conn.Close()
-			continue
-		}
-
-		// Round-robin
-		handlerIndex := s.nextIOHandler % s.numIoHandler
-		ioHandler := s.ioHandlers[handlerIndex]
+		// forward the new connection to an I/O handler in a round-robin manner
+		handler := s.ioHandlers[s.nextIOHandler%s.numIoHandler]
 		s.nextIOHandler++
 
-		// add duplicated fd into epoll of I/O handler
-		if err := ioHandler.AddConn(dupFd); err != nil {
-			log.Printf("Failed to add fd %d to I/O handler %d: %v", dupFd, ioHandler.Id, err)
-			syscall.Close(dupFd)
+		if err := handler.AddConn(conn); err != nil {
+			log.Printf("Failed to add connection to I/O handler %d: %v", handler.Id, err)
 			conn.Close()
-			continue
 		}
-
-		conn.Close()
 	}
 }

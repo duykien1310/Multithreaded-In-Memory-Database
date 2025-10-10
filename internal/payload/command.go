@@ -7,5 +7,5 @@ type Command struct {
 
 type Task struct {
 	Command *Command
-	ConnFd  int
+	ReplyCh chan []byte
 }

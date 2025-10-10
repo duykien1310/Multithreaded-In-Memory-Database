@@ -9,6 +9,8 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"net"
+	"sync"
 	"syscall"
 )
 
@@ -17,6 +19,8 @@ type IOHandler struct {
 	Poller    Poller
 	Workers   []*worker.Worker
 	NumWorker int
+	mu        sync.Mutex
+	Conns     map[int]net.Conn
 }
 
 func NewIOHandler(id int, workers []*worker.Worker, numWorker int) (*IOHandler, error) {
@@ -30,66 +34,74 @@ func NewIOHandler(id int, workers []*worker.Worker, numWorker int) (*IOHandler, 
 		Poller:    poller,
 		Workers:   workers,
 		NumWorker: numWorker,
+		Conns:     make(map[int]net.Conn), // map from fd to corresponding connection
 	}, nil
 }
 
-// Add connection to the handler's epoll monitoring list
-func (h *IOHandler) AddConn(connFd int) error {
-	// Add to epoll
-	err := h.Poller.Monitor(payload.Event{
-		Fd: connFd,
-		Op: config.OpRead,
+func (h *IOHandler) AddConn(conn net.Conn) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	tcpConn := conn.(*net.TCPConn)
+	rawConn, err := tcpConn.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	// get the fd from connection and add it to the monitoring list for read operation
+	var connFd int
+	err = rawConn.Control(func(fd uintptr) {
+		connFd = int(fd)
+		log.Printf("I/O Handler %d is monitoring fd %d", h.Id, connFd)
+		h.Conns[connFd] = conn
+
+		// Add to epoll
+		h.Poller.Monitor(payload.Event{
+			Fd: connFd,
+			Op: config.OpRead,
+		})
 	})
 
 	return err
 }
 
 func (h *IOHandler) Start() {
+	log.Printf("I/O Handler %d started", h.Id)
 	for {
-		// wait for file descriptors in the monitoring list to be ready for I/O
-		// it is a blocking call.
 		events, err := h.Poller.Wait()
 		if err != nil {
 			continue
 		}
 
-		for i := 0; i < len(events); i++ {
-			fd := events[i].Fd
-
-			cmd, err := readCommand(fd)
-			if err != nil {
-				if err == io.EOF || err == syscall.ECONNRESET {
-					log.Printf("client disconnected fd=%d", fd)
-					// Remove from epoll first, then close the fd
-					if remErr := h.Poller.Remove(fd); remErr != nil {
-						log.Printf("failed to remove fd %d from poller: %v", fd, remErr)
-					}
-					syscall.Close(fd)
-					continue
-				}
-				// If EAGAIN/EWOULDBLOCK, just ignore (no data now)
-				if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
-					continue
-				}
-				log.Println("read error:", err)
-				// On other fatal errors, also cleanup
-				if remErr := h.Poller.Remove(fd); remErr == nil {
-					syscall.Close(fd)
-				} else {
-					// ensure close anyway and log
-					syscall.Close(fd)
-				}
+		for _, event := range events {
+			connFd := event.Fd
+			h.mu.Lock()
+			conn, ok := h.Conns[connFd]
+			h.mu.Unlock()
+			if !ok {
 				continue
 			}
 
-			// dispatch task to worker (unchanged)
+			cmd, err := readCommandConn(conn)
+			if err != nil {
+				if err == io.EOF || err == syscall.ECONNRESET {
+					// log.Printf("Client disconnected (fd: %d)", connFd)
+				} else {
+					log.Printf("Read error on fd %d: %v", connFd, err)
+				}
+				h.closeConn(connFd)
+				continue
+			}
+
+			replyCh := make(chan []byte, 1)
 			task := &payload.Task{
 				Command: cmd,
-				ConnFd:  fd,
+				ReplyCh: replyCh,
 			}
+			// dispatch the command to the Worker
 			h.dispatch(task)
+			res := <-replyCh
+			conn.Write(res)
 		}
-
 	}
 }
 
@@ -112,17 +124,21 @@ func (h *IOHandler) getPartitionID(key string) int {
 	return int(hasher.Sum32()) % h.NumWorker
 }
 
-func readCommand(fd int) (*payload.Command, error) {
+func readCommandConn(conn net.Conn) (*payload.Command, error) {
 	var buf = make([]byte, 512)
-	n, err := syscall.Read(fd, buf)
+	n, err := conn.Read(buf)
 	if err != nil {
-		if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
-			return nil, err
-		}
 		return nil, err
 	}
-	if n == 0 {
-		return nil, io.EOF
-	}
 	return resp.ParseCmd(buf[:n])
+}
+
+func (h *IOHandler) closeConn(fd int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if conn, ok := h.Conns[fd]; ok {
+		conn.Close()
+		delete(h.Conns, fd)
+	}
 }

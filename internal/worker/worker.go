@@ -3,7 +3,6 @@ package worker
 import (
 	"backend/internal/datastore"
 	"backend/internal/payload"
-	"syscall"
 )
 
 type Worker struct {
@@ -26,7 +25,7 @@ func (w *Worker) Start() {
 	}
 }
 
-func (h *Worker) HandleCmd(task *payload.Task) error {
+func (h *Worker) HandleCmd(task *payload.Task) {
 	var res []byte
 
 	switch task.Command.Cmd {
@@ -90,6 +89,8 @@ func (h *Worker) HandleCmd(task *payload.Task) error {
 	default:
 		res = []byte("-CMD NOT FOUND\r\n")
 	}
-	_, err := syscall.Write(task.ConnFd, res)
-	return err
+	// _, err := syscall.Write(task.ConnFd, res)
+	// return err
+
+	task.ReplyCh <- res
 }
