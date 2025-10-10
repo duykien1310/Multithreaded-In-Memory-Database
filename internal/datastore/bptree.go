@@ -8,7 +8,7 @@ import (
 // Keys are (score float64, member string) and order is by score, then member lexicographically.
 // Internal nodes store separator keys and child pointers; leaves store actual entries and are linked.
 
-const bptOrder = 64
+const bptOrder = 3
 
 type bptKey struct {
 	score  float64
@@ -355,16 +355,17 @@ func (t *bptree) rankOf(key bptKey) int {
 
 // range by rank: returns slice of entries from start to stop inclusive (supports negative indices)
 func (t *bptree) rangeByRank(start, stop int) []bptKey {
-	if t.size == 0 {
+	if t == nil || t.size == 0 || t.root == nil {
 		return nil
 	}
-	// normalize negatives
+
 	n := t.size
+	// normalize negatives
 	if start < 0 {
-		start = n + start
+		start += n
 	}
 	if stop < 0 {
-		stop = n + stop
+		stop += n
 	}
 	if start < 0 {
 		start = 0
@@ -376,15 +377,13 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 		return nil
 	}
 
-	// find leaf & offset for start
+	need := stop - start + 1
 	idx := start
-	// descend from root using counts
 	node := t.root
 
-	// var path []int
+	// descend to leaf containing start
 	for !node.isLeaf() {
 		in := node.(*bptInternal)
-		// find child index where cumulative counts exceed idx
 		cum := 0
 		childIdx := 0
 		for i := 0; i < len(in.child); i++ {
@@ -394,23 +393,21 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 			}
 			cum += in.counts[i]
 		}
-
-		// path = append(path, childIdx)
-		idx = idx - cum
+		idx -= cum
 		node = in.child[childIdx]
 	}
-	l := node.(*bptLeaf)
-	// now idx is offset inside l.keys
-	result := make([]bptKey, 0, stop-start+1)
-	i := idx
-	curr := l
-	for curr != nil && len(result) <= (stop-start) {
-		for ; i < len(curr.keys) && len(result) <= (stop-start); i++ {
-			k := curr.keys[i]
-			result = append(result, bptKey{member: k.member, score: k.score})
+
+	leaf := node.(*bptLeaf)
+	result := make([]bptKey, 0, need)
+
+	// iterate forward across leaves collecting members
+	for curr := leaf; curr != nil && len(result) < need; curr = curr.next {
+		for ; idx < len(curr.keys) && len(result) < need; idx++ {
+			// copy key struct (cheap)
+			k := curr.keys[idx]
+			result = append(result, k)
 		}
-		curr = curr.next
-		i = 0
+		idx = 0
 	}
 	return result
 }

@@ -11,12 +11,14 @@ func encodeString(s string) []byte {
 }
 
 func encodeStringArray(sa []string) []byte {
-	var b []byte
-	buf := bytes.NewBuffer(b)
+	var buf bytes.Buffer
+	buf.Grow(len(sa) * 32) // pre-allocate roughly
+
+	fmt.Fprintf(&buf, "*%d\r\n", len(sa))
 	for _, s := range sa {
-		buf.Write(encodeString(s))
+		fmt.Fprintf(&buf, "$%d\r\n%s\r\n", len(s), s)
 	}
-	return []byte(fmt.Sprintf("*%d\r\n%s", len(sa), buf.Bytes()))
+	return buf.Bytes()
 }
 
 func encodeInt(v int) []byte {
@@ -56,11 +58,11 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 		}
 		return []byte(fmt.Sprintf("$%d%s%s%s", len(v), config.CRLF, v, config.CRLF))
 	case int64, int32, int16, int8, int, uint64, uint32, uint16, uint8, uint:
-		return []byte(fmt.Sprintf(":%d\r\n", v))
+		return []byte(fmt.Sprintf(":%v\r\n", v))
 	case error:
 		return []byte(fmt.Sprintf("-%s\r\n", v))
 	case []string:
-		return encodeStringArray(value.([]string))
+		return encodeStringArray(v)
 	case []int:
 		return encodeIntArray(value.([]int))
 	case []uint32:

@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"backend/internal/config"
-	"fmt"
 	"strconv"
 )
 
@@ -128,12 +127,16 @@ func (s *Datastore) ZRange(key string, start, stop int) ([]string, error) {
 		return []string{}, nil
 	}
 
-	bptKeys := zset.tree.rangeByRank(start, stop)
-	rs := make([]string, 0, len(bptKeys))
-	for _, k := range bptKeys {
-		rs = append(rs, k.member)
+	keys := zset.tree.rangeByRank(start, stop)
+	if len(keys) == 0 {
+		return []string{}, nil
 	}
-	return rs, nil
+
+	res := make([]string, len(keys))
+	for i, k := range keys {
+		res[i] = k.member
+	}
+	return res, nil
 }
 
 // ZRANGE WITHSCORES
@@ -146,13 +149,17 @@ func (s *Datastore) ZRangeWithScore(key string, start, stop int) ([]string, erro
 		return []string{}, nil
 	}
 
-	bptKeys := zset.tree.rangeByRank(start, stop)
-	rs := make([]string, 0, len(bptKeys)*2)
-	for _, k := range bptKeys {
-		rs = append(rs, k.member)
-		rs = append(rs, fmt.Sprintf("%.2f", k.score))
+	keys := zset.tree.rangeByRank(start, stop)
+	if len(keys) == 0 {
+		return []string{}, nil
 	}
-	return rs, nil
+
+	res := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		res = append(res, k.member)
+		res = append(res, strconv.FormatFloat(k.score, 'f', -1, 64))
+	}
+	return res, nil
 }
 
 // ZREM
