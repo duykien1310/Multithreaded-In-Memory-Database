@@ -25,6 +25,7 @@ func main() {
 	numCores := runtime.NumCPU()
 	numIOHandler := numCores / 2
 	numWorker := numCores / 2
+	log.Printf("Initializing server with %d workers and %d io handler\n", numWorker, numIOHandler)
 
 	// Create Workers
 	workers := make([]*worker.Worker, numWorker)
