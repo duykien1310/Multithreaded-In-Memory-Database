@@ -8,7 +8,7 @@ import (
 // Keys are (score float64, member string) and order is by score, then member lexicographically.
 // Internal nodes store separator keys and child pointers; leaves store actual entries and are linked.
 
-const bptOrder = 3
+const bptOrder = 64
 
 type bptKey struct {
 	score  float64
@@ -183,7 +183,6 @@ func (t *bptree) splitLeaf(l *bptLeaf) {
 		insertIdx++
 	}
 
-	// ✅ fix: allow inserting at end (rightmost)
 	if insertIdx > len(p.sep) {
 		insertIdx = len(p.sep)
 	}
@@ -403,7 +402,6 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 	// iterate forward across leaves collecting members
 	for curr := leaf; curr != nil && len(result) < need; curr = curr.next {
 		for ; idx < len(curr.keys) && len(result) < need; idx++ {
-			// copy key struct (cheap)
 			k := curr.keys[idx]
 			result = append(result, k)
 		}
