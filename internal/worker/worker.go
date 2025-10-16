@@ -74,6 +74,8 @@ func (h *Worker) HandleCmd(task *payload.Task) {
 		res = h.cmdZCARD(task.Command.Args)
 	case "ZRANGE":
 		res = h.cmdZRANGE(task.Command.Args)
+	case "ZREVRANGE":
+		res = h.cmdZREVRANGE(task.Command.Args)
 	case "ZREM":
 		res = h.cmdZREM(task.Command.Args)
 

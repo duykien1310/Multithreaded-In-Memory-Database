@@ -352,7 +352,6 @@ func (t *bptree) rankOf(key bptKey) int {
 	}
 }
 
-// range by rank: returns slice of entries from start to stop inclusive (supports negative indices)
 func (t *bptree) rangeByRank(start, stop int) []bptKey {
 	if t == nil || t.size == 0 || t.root == nil {
 		return nil
@@ -399,7 +398,6 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 	leaf := node.(*bptLeaf)
 	result := make([]bptKey, 0, need)
 
-	// iterate forward across leaves collecting members
 	for curr := leaf; curr != nil && len(result) < need; curr = curr.next {
 		for ; idx < len(curr.keys) && len(result) < need; idx++ {
 			k := curr.keys[idx]
@@ -408,4 +406,64 @@ func (t *bptree) rangeByRank(start, stop int) []bptKey {
 		idx = 0
 	}
 	return result
+}
+
+func (t *bptree) rangeByRankDesc(start, stop int) []bptKey {
+	if t == nil || t.size == 0 || t.root == nil {
+		return nil
+	}
+
+	n := t.size
+
+	if start < 0 {
+		start = n + start
+	}
+	if stop < 0 {
+		stop = n + stop
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop >= n {
+		stop = n - 1
+	}
+	if start > stop {
+		return nil
+	}
+
+	need := stop - start + 1
+
+	node := t.root
+	for !node.isLeaf() {
+		in := node.(*bptInternal)
+		node = in.child[len(in.child)-1]
+	}
+	curr := node.(*bptLeaf)
+
+	accum := 0 // number of elements we've "skipped" so far from the rightmost side
+	for curr != nil {
+		cnt := len(curr.keys)
+		if accum+cnt > start {
+			offsetFromRight := start - accum
+			idx := cnt - 1 - offsetFromRight
+
+			result := make([]bptKey, 0, need)
+			c := curr
+			i := idx
+			for c != nil && len(result) < need {
+				for ; i >= 0 && len(result) < need; i-- {
+					result = append(result, c.keys[i])
+				}
+				c = c.prev
+				if c != nil {
+					i = len(c.keys) - 1
+				}
+			}
+			return result
+		}
+		accum += cnt
+		curr = curr.prev
+	}
+
+	return nil
 }
