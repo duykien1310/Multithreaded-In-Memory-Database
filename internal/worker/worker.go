@@ -29,6 +29,9 @@ func (h *Worker) HandleCmd(task *payload.Task) {
 	var res []byte
 
 	switch task.Command.Cmd {
+	case "KEYS":
+		res = h.cmdKEYS(task.Command.Args)
+
 	case "PING":
 		res = h.cmdPING(task.Command.Args)
 	case "SET":

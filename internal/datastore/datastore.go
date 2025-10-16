@@ -1,6 +1,9 @@
 package datastore
 
-import "time"
+import (
+	"path"
+	"time"
+)
 
 type Entry struct {
 	val      any
@@ -31,4 +34,22 @@ func (s *Datastore) getEntry(key string) (Entry, bool) {
 		return Entry{}, false
 	}
 	return e, true
+}
+
+func (s *Datastore) Keys(pattern string) []string {
+	var res []string
+	for k := range s.m {
+		_, ok := s.getEntry(k)
+		if !ok {
+			continue
+		}
+		matched, err := path.Match(pattern, k)
+		if err != nil {
+			continue // ignore invalid pattern
+		}
+		if matched {
+			res = append(res, k)
+		}
+	}
+	return res
 }
