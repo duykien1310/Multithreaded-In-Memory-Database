@@ -29,6 +29,9 @@ func (h *Worker) HandleCmd(task *payload.Task) {
 	var res []byte
 
 	switch task.Command.Cmd {
+	case "KEYS":
+		res = h.cmdKEYS(task.Command.Args)
+
 	case "PING":
 		res = h.cmdPING(task.Command.Args)
 	case "SET":
@@ -71,6 +74,8 @@ func (h *Worker) HandleCmd(task *payload.Task) {
 		res = h.cmdZCARD(task.Command.Args)
 	case "ZRANGE":
 		res = h.cmdZRANGE(task.Command.Args)
+	case "ZREVRANGE":
+		res = h.cmdZREVRANGE(task.Command.Args)
 	case "ZREM":
 		res = h.cmdZREM(task.Command.Args)
 

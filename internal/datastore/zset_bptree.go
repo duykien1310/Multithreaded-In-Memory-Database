@@ -162,6 +162,51 @@ func (s *Datastore) ZRangeWithScore(key string, start, stop int) ([]string, erro
 	return res, nil
 }
 
+// ZRevRANGE
+func (s *Datastore) ZRevRange(key string, start, stop int) ([]string, error) {
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return nil, err
+	}
+	if zset == nil {
+		return []string{}, nil
+	}
+
+	keys := zset.tree.rangeByRankDesc(start, stop)
+	if len(keys) == 0 {
+		return []string{}, nil
+	}
+
+	res := make([]string, len(keys))
+	for i, k := range keys {
+		res[i] = k.member
+	}
+	return res, nil
+}
+
+// ZRevRANGE WITHSCORES
+func (s *Datastore) ZRevRangeWithScore(key string, start, stop int) ([]string, error) {
+	zset, err := s.getZSet(key)
+	if err != nil {
+		return nil, err
+	}
+	if zset == nil {
+		return []string{}, nil
+	}
+
+	keys := zset.tree.rangeByRankDesc(start, stop)
+	if len(keys) == 0 {
+		return []string{}, nil
+	}
+
+	res := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		res = append(res, k.member)
+		res = append(res, strconv.FormatFloat(k.score, 'f', -1, 64))
+	}
+	return res, nil
+}
+
 // ZREM
 func (s *Datastore) ZRem(key string, members []string) (int, error) {
 	zset, err := s.getZSet(key)

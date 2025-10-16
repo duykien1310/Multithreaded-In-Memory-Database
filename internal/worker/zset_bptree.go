@@ -115,6 +115,43 @@ func (h *Worker) cmdZRANGE(args []string) []byte {
 	return resp.Encode(res, false)
 }
 
+func (h *Worker) cmdZREVRANGE(args []string) []byte {
+	if len(args) < 3 {
+		return resp.Encode(config.ErrWrongNumberArguments, false)
+	}
+
+	withScores := false
+	if len(args) >= 4 {
+		if strings.EqualFold(args[3], "WITHSCORES") {
+			withScores = true
+		} else {
+			return resp.Encode(config.ErrSyntaxError, false)
+		}
+	}
+
+	key := args[0]
+	start, err := strconv.Atoi(args[1])
+	if err != nil {
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
+	}
+	stop, err := strconv.Atoi(args[2])
+	if err != nil {
+		return resp.Encode(config.ErrValueNotIntegerOrOutOfRange, false)
+	}
+
+	var res []string
+	if withScores {
+		res, err = h.datastore.ZRevRangeWithScore(key, start, stop)
+	} else {
+		res, err = h.datastore.ZRevRange(key, start, stop)
+	}
+	if err != nil {
+		return resp.Encode(err, false)
+	}
+
+	return resp.Encode(res, false)
+}
+
 func (h *Worker) cmdZREM(args []string) []byte {
 	if len(args) < 2 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)

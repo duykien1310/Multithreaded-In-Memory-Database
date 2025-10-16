@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+func (h *Worker) cmdKEYS(args []string) []byte {
+	if len(args) != 1 {
+		return resp.Encode(config.ErrWrongNumberArguments, false)
+	}
+	pattern := args[0]
+
+	keys := h.datastore.Keys(pattern)
+
+	return resp.Encode(keys, false)
+}
+
 func (h *Worker) cmdPING(args []string) []byte {
 	var res []byte
 	if len(args) > 1 {
