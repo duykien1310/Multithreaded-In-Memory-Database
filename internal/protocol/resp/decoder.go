@@ -85,14 +85,29 @@ func decodeError(data []byte) (string, int, error) {
 
 // $5\r\nhello\r\n => 5, 4
 func readLen(data []byte) (int, int) {
-	res, pos, _ := decodeInt64(data)
-	return int(res), pos
+	pos := 1
+	val := 0
+	for pos < len(data) && data[pos] != '\r' {
+		val = val*10 + int(data[pos]-'0')
+		pos++
+	}
+	return val, pos + 2
 }
 
 // $5\r\nhello\r\n => "hello"
 func decodeBulkString(data []byte) (string, int, error) {
 	length, pos := readLen(data)
-	return string(data[pos:(pos + length)]), pos + length + 2, nil
+
+	if length < 0 {
+		return "", pos, nil
+	}
+
+	if pos+length+2 > len(data) {
+		return "", 0, config.ErrNoData
+	}
+
+	val := string(data[pos : pos+length])
+	return val, pos + length + 2, nil
 }
 
 // *2\r\n$5\r\nhello\r\n$5\r\nworld\r\n => {"hello", "world"}
