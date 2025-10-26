@@ -13,7 +13,7 @@
 
 ### Command
 ```bash
-./redis/src/redis-benchmark -p 1234 -t set -n 100000 -r 100000 --threads 4
+./redis/src/redis-benchmark -p 1234 -t set -n 300000 -r 300000 --threads 4
 ```
 
 ### Results
@@ -32,7 +32,7 @@ The performance of the multi-threaded database is **comparable to Redis** for wr
 
 ### Command
 ```bash
-./redis/src/redis-benchmark -n 100000 -t get -h 127.0.0.1 -p 1234 -r 100000 --threads 4
+./redis/src/redis-benchmark -n 300000 -t get -h 127.0.0.1 -p 1234 -r 300000 --threads 4
 ```
 
 ### Results
@@ -52,7 +52,7 @@ This indicates strong **parallel read scalability**.
 
 ### Command
 ```bash
-./redis/src/redis-benchmark   -n 1000000   -r 10000   -p 1234   --threads 4   "ZADD" "zset:__rand_int__" "__rand_int__" "member:__rand_int__"
+./redis/src/redis-benchmark   -n 300000   -r 10000   -p 1234   --threads 4   "ZADD" "zset:__rand_int__" "__rand_int__" "member:__rand_int__"
 ```
 
 ### Results
@@ -71,7 +71,7 @@ The multi-threaded system delivers **~25% higher throughput** and **better laten
 
 ### Command
 ```bash
-./redis/src/redis-benchmark   -n 100000  -r 10000   -p 1234   --threads 4   "ZRANGE" "myzset:__rand_int__" "0" "-1"
+./redis/src/redis-benchmark   -n 300000  -r 10000   -p 1234   --threads 4   "ZRANGE" "myzset:__rand_int__" "0" "-1"
 ```
 
 ### Results
