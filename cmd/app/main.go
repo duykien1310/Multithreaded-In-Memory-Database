@@ -7,8 +7,9 @@ import (
 	"backend/internal/server"
 	"backend/internal/worker"
 	"log"
-	"net/http"
-	_ "net/http/pprof"
+
+	// "net/http"
+	// _ "net/http/pprof"
 	"runtime"
 )
 
@@ -17,9 +18,9 @@ func init() {
 }
 
 func main() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
 
 	configEnv := config.EnvConfig{
 		Host:     config.GetString("host.address"),
