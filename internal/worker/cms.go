@@ -109,7 +109,7 @@ func (h *Worker) cmdCMSQUERY(args []string) []byte {
 }
 
 func (h *Worker) cmdINFO(args []string) []byte {
-	if len(args) > 1 {
+	if len(args) != 1 {
 		return resp.Encode(config.ErrWrongNumberArguments, false)
 	}
 
